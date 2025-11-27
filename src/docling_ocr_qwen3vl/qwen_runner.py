@@ -46,12 +46,19 @@ class Qwen3VlRunner:
             ) from exc
 
         requested_device = self.options.device or "cuda"
-        if "cuda" in requested_device and not torch.cuda.is_available():
-            _log.warning("CUDA device not available but requested. Falling back to CPU.")
-            requested_device = "cpu"
+        if "cuda" not in requested_device:
+            raise RuntimeError(
+                "Qwen3-VL requires a CUDA device. "
+                "Set `device='cuda'` and ensure an NVIDIA GPU is available."
+            )
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA device not available but required by Qwen3-VL. "
+                "Check GPU visibility and drivers."
+            )
 
         torch_device = torch.device(requested_device)
-        if torch_device.type == "cuda" and torch_device.index is not None:
+        if torch_device.index is not None:
             torch.cuda.set_device(torch_device.index)
 
         # Resolve dtype

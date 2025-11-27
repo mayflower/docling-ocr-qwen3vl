@@ -11,7 +11,7 @@ This package integrates the [Qwen3-VL-8B-Thinking](https://huggingface.co/Qwen/Q
 
 ## Requirements
 
-- NVIDIA GPU with CUDA support (recommended, CPU fallback available)
+- NVIDIA GPU with CUDA support (required)
 - Python 3.10+
 - Docling >= 2.57.0 with external plugins enabled
 - transformers >= 4.51.0
