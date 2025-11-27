@@ -17,6 +17,14 @@ class Qwen3VlPromptMode(str, Enum):
     STRUCTURED = "structured"
 
 
+class Qwen3VlQuantization(str, Enum):
+    """Quantization modes for Qwen3-VL."""
+
+    NONE = "none"
+    INT8 = "int8"
+    INT4 = "int4"
+
+
 class Qwen3VlOcrOptions(OcrOptions):
     """Options exposed to Docling users for configuring the Qwen3-VL OCR engine."""
 
@@ -104,6 +112,18 @@ class Qwen3VlOcrOptions(OcrOptions):
         description="Scale factor applied when rasterizing PDF regions for inference.",
         ge=1.0,
         le=4.0,
+    )
+    quantization: Qwen3VlQuantization = Field(
+        default=Qwen3VlQuantization.NONE,
+        description="Quantization mode: none (full precision), int8 (8-bit), int4 (4-bit). Reduces VRAM usage.",
+    )
+    bnb_4bit_quant_type: str = Field(
+        default="nf4",
+        description="4-bit quantization type for BitsAndBytes: 'nf4' or 'fp4'.",
+    )
+    bnb_4bit_use_double_quant: bool = Field(
+        default=True,
+        description="Use nested quantization for additional memory savings (~0.4 bits/param).",
     )
 
     model_config = ConfigDict(

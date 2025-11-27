@@ -88,6 +88,16 @@ class Qwen3VlRunner:
             model_kwargs["attn_implementation"] = attn_impl
         if self.options.hf_token:
             model_kwargs["token"] = self.options.hf_token
+
+        # Configure quantization if requested
+        quantization_config = _create_quantization_config(self.options)
+        if quantization_config is not None:
+            model_kwargs["quantization_config"] = quantization_config
+            _log.info(
+                "Using %s quantization (this reduces VRAM usage)",
+                self.options.quantization.value,
+            )
+
         model_kwargs.update(self.options.model_kwargs)
 
         _log.info("Loading Qwen3-VL model (this can take a while)...")
@@ -97,8 +107,8 @@ class Qwen3VlRunner:
         )
         model = model.eval()
 
-        # If not using device_map, move to device manually
-        if model_kwargs.get("device_map") is None:
+        # If not using device_map, move to device manually (skip for quantized models)
+        if model_kwargs.get("device_map") is None and quantization_config is None:
             model = model.to(torch_device)
 
         self._model = model
@@ -246,3 +256,34 @@ def _maybe_empty_cache() -> None:
             torch.cuda.empty_cache()
     except Exception:
         pass
+
+
+def _create_quantization_config(options: Qwen3VlOcrOptions):
+    """Create BitsAndBytesConfig for quantization if requested."""
+    from .options import Qwen3VlQuantization
+
+    if options.quantization == Qwen3VlQuantization.NONE:
+        return None
+
+    try:
+        import torch
+        from transformers import BitsAndBytesConfig
+    except ImportError as exc:
+        raise ImportError(
+            "BitsAndBytes quantization requires `bitsandbytes` package. "
+            "Install with: pip install bitsandbytes"
+        ) from exc
+
+    if options.quantization == Qwen3VlQuantization.INT8:
+        return BitsAndBytesConfig(
+            load_in_8bit=True,
+        )
+    if options.quantization == Qwen3VlQuantization.INT4:
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type=options.bnb_4bit_quant_type,
+            bnb_4bit_use_double_quant=options.bnb_4bit_use_double_quant,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+
+    return None

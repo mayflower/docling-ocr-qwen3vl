@@ -87,6 +87,50 @@ docling --allow-external-plugins --ocr-engine qwen3vl_ocr scanned.pdf
 - **MARKDOWN**: Convert document to markdown format
 - **STRUCTURED**: Extract text with layout awareness (headings, paragraphs, tables)
 
+## Quantization (Reduce VRAM Usage)
+
+The plugin supports 4-bit and 8-bit quantization via BitsAndBytes, significantly reducing VRAM requirements:
+
+| Mode | VRAM (approx) |
+|------|---------------|
+| Full precision (bf16) | ~16GB |
+| 8-bit (int8) | ~8GB |
+| 4-bit (int4) | ~5GB |
+
+### Installation
+
+```bash
+pip install -e .[quantization]
+# or
+pip install bitsandbytes
+```
+
+### Usage
+
+```python
+from docling_ocr_qwen3vl.options import Qwen3VlOcrOptions, Qwen3VlQuantization
+
+# 4-bit quantization (recommended for limited VRAM)
+opts.ocr_options = Qwen3VlOcrOptions(
+    quantization=Qwen3VlQuantization.INT4,
+    force_full_page_ocr=True,
+)
+
+# 8-bit quantization (better quality, more VRAM)
+opts.ocr_options = Qwen3VlOcrOptions(
+    quantization=Qwen3VlQuantization.INT8,
+    force_full_page_ocr=True,
+)
+```
+
+### Quantization Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `quantization` | `NONE` | Quantization mode: `NONE`, `INT8`, `INT4` |
+| `bnb_4bit_quant_type` | `"nf4"` | 4-bit quantization type: `nf4` or `fp4` |
+| `bnb_4bit_use_double_quant` | `True` | Nested quantization for extra memory savings |
+
 ## Attention Backends
 
 Qwen3-VL defaults to `flash_attention_2`. If `flash-attn` is not available, the plugin automatically falls back to `eager` attention.
