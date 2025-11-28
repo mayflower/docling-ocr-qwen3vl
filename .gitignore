@@ -132,3 +132,6 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# PDFs (test files)
+*.pdf

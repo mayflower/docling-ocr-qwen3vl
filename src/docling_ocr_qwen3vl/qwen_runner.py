@@ -181,11 +181,24 @@ class Qwen3VlRunner:
         )[0]
 
         output_text = output_text.strip()
+        # Strip thinking tags from Qwen3-VL-Thinking models
+        output_text = _strip_thinking_tags(output_text)
         paragraphs = _split_paragraphs(output_text)
 
         _maybe_empty_cache()
 
         return Qwen3VlResult(text=output_text, paragraphs=paragraphs)
+
+
+def _strip_thinking_tags(text: str) -> str:
+    """Remove thinking blocks from Qwen3-VL-Thinking model output."""
+    import re
+
+    # Remove everything between <think> and </think> tags (including tags)
+    cleaned = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
+    # Also handle case where thinking starts implicitly and ends with </think>
+    cleaned = re.sub(r"^.*?</think>\s*", "", cleaned, flags=re.DOTALL)
+    return cleaned.strip()
 
 
 def _split_paragraphs(text: str) -> list[str]:
