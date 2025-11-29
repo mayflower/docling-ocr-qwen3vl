@@ -54,3 +54,128 @@ def resolve_prompt(mode: Qwen3VlPromptMode, overrides: dict[str, str]) -> str:
         if candidate:
             return candidate
     return DEFAULT_PROMPTS[mode]
+
+
+# Prompt for table structure extraction
+TABLE_STRUCTURE_PROMPT = """Analyze the table in this image and extract its structure.
+
+Output a JSON object with the following format:
+{
+  "rows": <number of rows>,
+  "cols": <number of columns>,
+  "cells": [
+    {
+      "row": <0-indexed row>,
+      "col": <0-indexed column>,
+      "row_span": <number of rows spanned, default 1>,
+      "col_span": <number of columns spanned, default 1>,
+      "text": "<cell text content>",
+      "is_header": <true if header cell, false otherwise>,
+      "bbox": [x1, y1, x2, y2]
+    },
+    ...
+  ]
+}
+
+Rules:
+- Coordinates are in [0, 1000] scale relative to the table image
+- Include ALL cells, including merged cells
+- For merged cells, use row_span and col_span > 1
+- is_header should be true for header rows/columns
+- Output ONLY valid JSON, no explanations"""
+
+
+# Prompt for layout analysis
+LAYOUT_ANALYSIS_PROMPT = """Analyze the document layout in this image.
+
+Identify all document elements and output a JSON array with the following format:
+[
+  {
+    "label": "<element type>",
+    "bbox": [x1, y1, x2, y2],
+    "confidence": <0.0 to 1.0>,
+    "text": "<text content if applicable>"
+  },
+  ...
+]
+
+Element types (use exactly these labels):
+- "title" - Main document title
+- "section_header" - Section headings
+- "text" - Regular paragraph text
+- "list_item" - List items (bulleted or numbered)
+- "table" - Table regions
+- "picture" - Images, figures, diagrams
+- "caption" - Figure/table captions
+- "footnote" - Footnotes
+- "page_header" - Page headers
+- "page_footer" - Page footers
+- "formula" - Mathematical formulas
+- "code" - Code blocks
+
+Rules:
+- Coordinates are in [0, 1000] scale relative to the page
+- Include ALL visible elements
+- Maintain reading order (top to bottom, left to right)
+- Output ONLY valid JSON array, no explanations"""
+
+
+# Prompt for picture classification
+PICTURE_CLASSIFICATION_PROMPT = """Classify this image into one or more categories.
+
+Output a JSON object with the following format:
+{
+  "classes": [
+    {"class_name": "<category>", "confidence": <0.0 to 1.0>},
+    ...
+  ]
+}
+
+Available categories (use exactly these names):
+- "photograph" - Real-world photographs
+- "chart" - Bar charts, line charts, pie charts, etc.
+- "diagram" - Technical diagrams, flowcharts, architecture diagrams
+- "illustration" - Drawings, sketches, artistic illustrations
+- "table" - Tabular data presented as an image
+- "map" - Geographic maps
+- "screenshot" - Software screenshots
+- "logo" - Company logos, brand marks
+- "equation" - Mathematical equations or formulas
+- "other" - None of the above
+
+Rules:
+- Return 1-3 most likely classes
+- Confidence values should sum to approximately 1.0
+- Output ONLY valid JSON, no explanations"""
+
+
+# Prompt for code detection
+CODE_DETECTION_PROMPT = """Analyze this image and extract any code content.
+
+If this image contains code, output a JSON object:
+{
+  "is_code": true,
+  "language": "<programming language>",
+  "code": "<extracted code text>"
+}
+
+If this image contains a mathematical formula, output:
+{
+  "is_formula": true,
+  "latex": "<LaTeX representation of the formula>"
+}
+
+If neither code nor formula, output:
+{
+  "is_code": false,
+  "is_formula": false
+}
+
+Programming languages to detect:
+python, javascript, typescript, java, c, cpp, csharp, go, rust, ruby, php, swift, kotlin, sql, bash, html, css, json, yaml, xml, other
+
+Rules:
+- Extract the exact code/formula text
+- Identify the programming language accurately
+- For formulas, provide valid LaTeX
+- Output ONLY valid JSON, no explanations"""
