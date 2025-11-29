@@ -49,6 +49,15 @@ def main():
     result_md = runner.run(img, prompt_mode=Qwen3VlPromptMode.MARKDOWN)
     print(f"Markdown:\n{result_md.text}")
 
+    # Test QwenVL HTML mode with bounding boxes
+    print("\n--- QwenVL HTML Mode (with bounding boxes) ---")
+    result_html = runner.run(img, prompt_mode=Qwen3VlPromptMode.QWENVL_HTML)
+    print(f"Raw HTML:\n{result_html.raw_html[:500] if result_html.raw_html else 'None'}...")
+    print(f"\nParsed {len(result_html.html_elements)} elements:")
+    for el in result_html.html_elements[:10]:
+        bbox_str = f"bbox={el.bbox}" if el.bbox else "no bbox"
+        print(f"  [{el.element_type}] {el.text[:60]}... ({bbox_str})")
+
     print("\nGPU test passed!")
 
 

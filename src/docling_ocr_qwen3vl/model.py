@@ -88,11 +88,20 @@ class Qwen3VlOcrModel(BaseOcrModel):
                         prompt_mode=self.options.prompt_mode,
                     )
 
-                    cells = self._paragraphs_to_cells(
-                        result.paragraphs,
-                        rect=rect,
-                        index_offset=len(all_ocr_cells),
-                    )
+                    # Use HTML elements with real bounding boxes if available
+                    if result.html_elements:
+                        cells = self._html_elements_to_cells(
+                            result.html_elements,
+                            rect=rect,
+                            image_size=high_res_image.size,
+                            index_offset=len(all_ocr_cells),
+                        )
+                    else:
+                        cells = self._paragraphs_to_cells(
+                            result.paragraphs,
+                            rect=rect,
+                            index_offset=len(all_ocr_cells),
+                        )
 
                     all_ocr_cells.extend(cells)
 
@@ -126,8 +135,8 @@ class Qwen3VlOcrModel(BaseOcrModel):
     ) -> list[TextCell]:
         """Convert paragraphs into Docling TextCells with approximate positions.
 
-        Since Qwen3-VL doesn't provide bounding boxes, we distribute paragraphs
-        evenly across the vertical space of the OCR region.
+        For non-HTML modes, we distribute paragraphs evenly across the vertical
+        space of the OCR region. For accurate bounding boxes, use QWENVL_HTML mode.
         """
         cells: list[TextCell] = []
 
@@ -157,6 +166,76 @@ class Qwen3VlOcrModel(BaseOcrModel):
                 b=bottom,
                 coord_origin=CoordOrigin.TOPLEFT,
             )
+
+            rect_obj = BoundingRectangle.from_bounding_box(bbox)
+            cells.append(
+                TextCell(
+                    index=index_offset + len(cells),
+                    text=text,
+                    orig=text,
+                    from_ocr=True,
+                    confidence=1.0,
+                    rect=rect_obj,
+                )
+            )
+
+        return cells
+
+    @staticmethod
+    def _html_elements_to_cells(
+        html_elements: list,
+        *,
+        rect: BoundingBox,
+        image_size: tuple[int, int],
+        index_offset: int = 0,
+    ) -> list[TextCell]:
+        """Convert HTML elements with bounding boxes into Docling TextCells.
+
+        The bounding boxes from QwenVL HTML are in image pixel coordinates.
+        We scale them to match the OCR region in document coordinates.
+        """
+        from .qwen_runner import HtmlElement
+
+        cells: list[TextCell] = []
+
+        if not html_elements:
+            return cells
+
+        img_width, img_height = image_size
+        region_width = rect.r - rect.l
+        region_height = rect.b - rect.t
+
+        # Scale factors to convert image coordinates to document coordinates
+        scale_x = region_width / img_width if img_width > 0 else 1.0
+        scale_y = region_height / img_height if img_height > 0 else 1.0
+
+        for element in html_elements:
+            if not isinstance(element, HtmlElement):
+                continue
+
+            text = element.text.strip()
+            if not text:
+                continue
+
+            if element.bbox:
+                # Use real bounding box from QwenVL HTML
+                x1, y1, x2, y2 = element.bbox
+                bbox = BoundingBox(
+                    l=rect.l + (x1 * scale_x),
+                    t=rect.t + (y1 * scale_y),
+                    r=rect.l + (x2 * scale_x),
+                    b=rect.t + (y2 * scale_y),
+                    coord_origin=CoordOrigin.TOPLEFT,
+                )
+            else:
+                # Fall back to full region if no bbox available
+                bbox = BoundingBox(
+                    l=rect.l,
+                    t=rect.t,
+                    r=rect.r,
+                    b=rect.b,
+                    coord_origin=CoordOrigin.TOPLEFT,
+                )
 
             rect_obj = BoundingRectangle.from_bounding_box(bbox)
             cells.append(

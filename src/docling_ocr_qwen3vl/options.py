@@ -15,6 +15,7 @@ class Qwen3VlPromptMode(str, Enum):
     OCR = "ocr"
     MARKDOWN = "markdown"
     STRUCTURED = "structured"
+    QWENVL_HTML = "qwenvl_html"
 
 
 class Qwen3VlQuantization(str, Enum):
