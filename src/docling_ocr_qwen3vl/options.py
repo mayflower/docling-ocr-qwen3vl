@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any, ClassVar, Literal
 
@@ -11,7 +12,39 @@ from docling.datamodel.pipeline_options import (
     OcrOptions,
     PictureDescriptionBaseOptions,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+DEFAULT_QWEN3VL_MODEL_REPO_ID = "cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"
+_HF_CACHE_REPO_DIR_PATTERN = re.compile(r"^(?:models--)?(?P<owner>[^/\\]+)--(?P<repo>[^/\\]+)$")
+
+
+def _normalize_model_repo_id(value: str) -> str:
+    """Normalize Hugging Face cache directory paths back to owner/repo repo IDs.
+
+    Some runtimes rewrite model repo IDs to cache-folder names like
+    `/.../cyankiwi--Qwen3-VL-4B-Thinking-AWQ-4bit` or
+    `/.../models--cyankiwi--Qwen3-VL-4B-Thinking-AWQ-4bit`.
+    Transformers APIs expect `owner/repo`.
+    """
+    normalized = value.strip()
+    if not normalized:
+        return normalized
+
+    # Keep canonical Hugging Face ids untouched (owner/repo).
+    if (
+        not normalized.startswith(("/", "./", "../"))
+        and "\\" not in normalized
+        and normalized.count("/") == 1
+    ):
+        return normalized
+
+    basename = normalized.replace("\\", "/").rstrip("/").split("/")[-1]
+    match = _HF_CACHE_REPO_DIR_PATTERN.match(basename)
+    if not match:
+        return normalized
+    owner = match.group("owner")
+    repo = match.group("repo")
+    return f"{owner}/{repo}"
 
 
 class Qwen3VlPromptMode(str, Enum):
@@ -44,7 +77,7 @@ class Qwen3VlOcrOptions(OcrOptions):
         ),
     )
     model_repo_id: str = Field(
-        default="Qwen/Qwen3-VL-8B-Thinking",
+        default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     prompt_mode: Qwen3VlPromptMode = Field(
@@ -132,6 +165,11 @@ class Qwen3VlOcrOptions(OcrOptions):
         description="Use nested quantization for additional memory savings.",
     )
 
+    @field_validator("model_repo_id", mode="before")
+    @classmethod
+    def _validate_model_repo_id(cls, value: str) -> str:
+        return _normalize_model_repo_id(value)
+
     model_config = ConfigDict(
         extra="forbid",
         protected_namespaces=(),
@@ -144,7 +182,7 @@ class Qwen3VlPictureDescriptionOptions(PictureDescriptionBaseOptions):
     kind: ClassVar[Literal["qwen3vl"]] = "qwen3vl"
 
     model_repo_id: str = Field(
-        default="Qwen/Qwen3-VL-8B-Thinking",
+        default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     prompt: str = Field(
@@ -202,6 +240,11 @@ class Qwen3VlPictureDescriptionOptions(PictureDescriptionBaseOptions):
         description="Generation config passed to model.generate().",
     )
 
+    @field_validator("model_repo_id", mode="before")
+    @classmethod
+    def _validate_model_repo_id(cls, value: str) -> str:
+        return _normalize_model_repo_id(value)
+
     model_config = ConfigDict(
         extra="forbid",
         protected_namespaces=(),
@@ -214,7 +257,7 @@ class Qwen3VlTableStructureOptions(BaseTableStructureOptions):
     kind: ClassVar[Literal["qwen3vl_table"]] = "qwen3vl_table"
 
     model_repo_id: str = Field(
-        default="Qwen/Qwen3-VL-8B-Thinking",
+        default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     device: str | None = Field(
@@ -259,6 +302,11 @@ class Qwen3VlTableStructureOptions(BaseTableStructureOptions):
         description="Match predicted cells back to PDF text cells.",
     )
 
+    @field_validator("model_repo_id", mode="before")
+    @classmethod
+    def _validate_model_repo_id(cls, value: str) -> str:
+        return _normalize_model_repo_id(value)
+
     model_config = ConfigDict(
         extra="forbid",
         protected_namespaces=(),
@@ -271,7 +319,7 @@ class Qwen3VlLayoutOptions(BaseLayoutOptions):
     kind: ClassVar[Literal["qwen3vl_layout"]] = "qwen3vl_layout"
 
     model_repo_id: str = Field(
-        default="Qwen/Qwen3-VL-8B-Thinking",
+        default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     device: str | None = Field(
@@ -312,6 +360,11 @@ class Qwen3VlLayoutOptions(BaseLayoutOptions):
         description="Use nested quantization for additional memory savings.",
     )
 
+    @field_validator("model_repo_id", mode="before")
+    @classmethod
+    def _validate_model_repo_id(cls, value: str) -> str:
+        return _normalize_model_repo_id(value)
+
     model_config = ConfigDict(
         extra="forbid",
         protected_namespaces=(),
@@ -324,7 +377,7 @@ class Qwen3VlPictureClassifierOptions(BaseModel):
     kind: ClassVar[Literal["qwen3vl_classifier"]] = "qwen3vl_classifier"
 
     model_repo_id: str = Field(
-        default="Qwen/Qwen3-VL-8B-Thinking",
+        default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     device: str | None = Field(
@@ -365,6 +418,11 @@ class Qwen3VlPictureClassifierOptions(BaseModel):
         description="Use nested quantization for additional memory savings.",
     )
 
+    @field_validator("model_repo_id", mode="before")
+    @classmethod
+    def _validate_model_repo_id(cls, value: str) -> str:
+        return _normalize_model_repo_id(value)
+
     model_config = ConfigDict(
         extra="forbid",
         protected_namespaces=(),
@@ -377,7 +435,7 @@ class Qwen3VlCodeFormulaOptions(BaseModel):
     kind: ClassVar[Literal["qwen3vl_code_formula"]] = "qwen3vl_code_formula"
 
     model_repo_id: str = Field(
-        default="Qwen/Qwen3-VL-8B-Thinking",
+        default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     device: str | None = Field(
@@ -425,6 +483,11 @@ class Qwen3VlCodeFormulaOptions(BaseModel):
         default=True,
         description="Enable formula detection and LaTeX extraction.",
     )
+
+    @field_validator("model_repo_id", mode="before")
+    @classmethod
+    def _validate_model_repo_id(cls, value: str) -> str:
+        return _normalize_model_repo_id(value)
 
     model_config = ConfigDict(
         extra="forbid",

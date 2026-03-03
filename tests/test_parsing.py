@@ -2,7 +2,16 @@ import math
 
 from docling_core.types.doc import BoundingBox, CoordOrigin
 from docling_ocr_qwen3vl.model import Qwen3VlOcrModel
-from docling_ocr_qwen3vl.options import Qwen3VlOcrOptions, Qwen3VlPromptMode
+from docling_ocr_qwen3vl.options import (
+    DEFAULT_QWEN3VL_MODEL_REPO_ID,
+    Qwen3VlCodeFormulaOptions,
+    Qwen3VlLayoutOptions,
+    Qwen3VlOcrOptions,
+    Qwen3VlPictureClassifierOptions,
+    Qwen3VlPictureDescriptionOptions,
+    Qwen3VlPromptMode,
+    Qwen3VlTableStructureOptions,
+)
 from docling_ocr_qwen3vl.plugins import ocr_engines
 from docling_ocr_qwen3vl.prompts import resolve_prompt
 from docling_ocr_qwen3vl.qwen_runner import _select_attention_backend, _split_paragraphs
@@ -125,9 +134,31 @@ def test_attention_backend_falls_back_when_flash_attn_missing(monkeypatch):
 def test_options_defaults():
     options = Qwen3VlOcrOptions()
     assert options.kind == "qwen3vl_ocr"
-    assert options.model_repo_id == "Qwen/Qwen3-VL-8B-Thinking"
+    assert options.model_repo_id == DEFAULT_QWEN3VL_MODEL_REPO_ID
     assert options.device == "cuda"
     assert options.max_new_tokens == 4096
     assert options.temperature == 0.6
     assert options.top_p == 0.95
     assert options.top_k == 20
+
+
+def test_options_normalize_cache_path_to_repo_id():
+    cache_path = "/opt/app-root/src/.cache/docling/models/cyankiwi--Qwen3-VL-4B-Thinking-AWQ-4bit"
+    options = Qwen3VlOcrOptions(model_repo_id=cache_path)
+    assert options.model_repo_id == DEFAULT_QWEN3VL_MODEL_REPO_ID
+
+
+def test_options_normalize_models_prefixed_cache_path_to_repo_id():
+    cache_path = "/opt/app-root/src/.cache/huggingface/models--cyankiwi--Qwen3-VL-4B-Thinking-AWQ-4bit"
+    option_classes = [
+        Qwen3VlOcrOptions,
+        Qwen3VlPictureDescriptionOptions,
+        Qwen3VlTableStructureOptions,
+        Qwen3VlLayoutOptions,
+        Qwen3VlPictureClassifierOptions,
+        Qwen3VlCodeFormulaOptions,
+    ]
+
+    for option_class in option_classes:
+        options = option_class(model_repo_id=cache_path)
+        assert options.model_repo_id == DEFAULT_QWEN3VL_MODEL_REPO_ID
