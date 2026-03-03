@@ -12,9 +12,13 @@ from pathlib import Path
 from docling.datamodel.accelerator_options import AcceleratorOptions
 from docling.datamodel.base_models import BoundingBox, Cluster, LayoutPrediction, Page
 from docling.datamodel.document import ConversionResult
-from docling.datamodel.pipeline_options import BaseLayoutOptions
 from docling.models.base_layout_model import BaseLayoutModel
 from docling_core.types.doc import DocItemLabel
+
+try:
+    from docling.datamodel.pipeline_options import BaseLayoutOptions
+except ImportError:
+    from docling.datamodel.pipeline_options import LayoutOptions as BaseLayoutOptions
 
 from .options import Qwen3VlLayoutOptions, Qwen3VlQuantization
 from .prompts import LAYOUT_ANALYSIS_PROMPT

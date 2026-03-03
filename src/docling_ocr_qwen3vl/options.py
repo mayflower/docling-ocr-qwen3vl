@@ -6,13 +6,21 @@ import re
 from enum import Enum
 from typing import Any, ClassVar, Literal
 
-from docling.datamodel.pipeline_options import (
-    BaseLayoutOptions,
-    BaseTableStructureOptions,
-    OcrOptions,
-    PictureDescriptionBaseOptions,
-)
+from docling.datamodel.pipeline_options import OcrOptions, PictureDescriptionBaseOptions
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+try:
+    from docling.datamodel.pipeline_options import (
+        BaseLayoutOptions,
+        BaseTableStructureOptions,
+    )
+except ImportError:
+    from docling.datamodel.pipeline_options import (
+        LayoutOptions as BaseLayoutOptions,
+    )
+    from docling.datamodel.pipeline_options import (
+        TableStructureOptions as BaseTableStructureOptions,
+    )
 
 DEFAULT_QWEN3VL_MODEL_REPO_ID = "cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"
 _HF_CACHE_REPO_DIR_PATTERN = re.compile(r"^(?:models--)?(?P<owner>[^/\\]+)--(?P<repo>[^/\\]+)$")

@@ -12,9 +12,15 @@ from pathlib import Path
 from docling.datamodel.accelerator_options import AcceleratorOptions
 from docling.datamodel.base_models import BoundingBox, Page, Table, TableStructurePrediction
 from docling.datamodel.document import ConversionResult
-from docling.datamodel.pipeline_options import BaseTableStructureOptions
 from docling.models.base_table_model import BaseTableStructureModel
 from docling_core.types.doc import DocItemLabel, TableCell
+
+try:
+    from docling.datamodel.pipeline_options import BaseTableStructureOptions
+except ImportError:
+    from docling.datamodel.pipeline_options import (
+        TableStructureOptions as BaseTableStructureOptions,
+    )
 
 from .options import Qwen3VlQuantization, Qwen3VlTableStructureOptions
 from .prompts import TABLE_STRUCTURE_PROMPT
