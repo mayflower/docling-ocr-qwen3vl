@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "docling-ocr-qwen3vl"
 version = "0.1.0"
-description = "Docling OCR plugin using Qwen3-VL-8B-Thinking vision-language model"
+description = "Docling OCR plugin using Qwen3-VL vision-language models"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -14,6 +14,7 @@ dependencies = [
     "torch>=2.0.0",
     "transformers>=4.51.0",
     "accelerate>=0.33.0",
+    "compressed-tensors",
     "Pillow",
     "qwen-vl-utils",
 ]

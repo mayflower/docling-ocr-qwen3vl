@@ -1,6 +1,6 @@
 # Docling Qwen3-VL Plugin
 
-This package integrates the [Qwen3-VL-8B-Thinking](https://huggingface.co/Qwen/Qwen3-VL-8B-Thinking) vision-language model with [Docling](https://github.com/docling-project/docling) through the plugin system. It provides:
+This package integrates the [cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit](https://huggingface.co/cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit) vision-language model with [Docling](https://github.com/docling-project/docling) through the plugin system. It provides:
 
 1. **OCR Engine** - Extract text from scanned documents with layout-aware bounding boxes
 2. **Picture Description** - Generate detailed descriptions of images/figures in documents
@@ -11,7 +11,7 @@ This package integrates the [Qwen3-VL-8B-Thinking](https://huggingface.co/Qwen/Q
 
 ## Features
 
-- Powerful 8B parameter vision-language model
+- AWQ-quantized Qwen3-VL default model for lower VRAM usage
 - **Layout-aware OCR with bounding boxes** via QWENVL_HTML mode
 - **Picture/figure description and captioning** for document enrichment
 - **Table structure extraction** with cell and row/column detection
@@ -182,7 +182,7 @@ opts.ocr_options = Qwen3VlOcrOptions(
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_repo_id` | `"Qwen/Qwen3-VL-8B-Thinking"` | Hugging Face model identifier |
+| `model_repo_id` | `"cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"` | Hugging Face model identifier |
 | `device` | `"cuda"` | Torch device (must be CUDA) |
 | `dtype` | `"auto"` | Model dtype (auto, bfloat16, float16, float32) |
 | `max_new_tokens` | `4096` | Maximum tokens to generate |
@@ -294,7 +294,7 @@ Note: The `--generate-picture-images` flag is required for picture description t
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_repo_id` | `"Qwen/Qwen3-VL-8B-Thinking"` | Hugging Face model identifier |
+| `model_repo_id` | `"cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"` | Hugging Face model identifier |
 | `prompt` | (detailed description prompt) | Custom prompt for image description |
 | `max_new_tokens` | `512` | Maximum tokens for description |
 | `quantization` | `NONE` | Quantization mode: `NONE`, `INT8`, `INT4` |
@@ -335,7 +335,7 @@ opts.table_structure_options = Qwen3VlTableStructureOptions(
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_repo_id` | `"Qwen/Qwen3-VL-8B-Thinking"` | Hugging Face model identifier |
+| `model_repo_id` | `"cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"` | Hugging Face model identifier |
 | `max_new_tokens` | `4096` | Maximum tokens for table extraction |
 | `quantization` | `NONE` | Quantization mode: `NONE`, `INT8`, `INT4` |
 | `do_cell_matching` | `True` | Match predicted cells back to PDF text cells |
@@ -373,7 +373,7 @@ The layout model can detect and classify the following document elements:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_repo_id` | `"Qwen/Qwen3-VL-8B-Thinking"` | Hugging Face model identifier |
+| `model_repo_id` | `"cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"` | Hugging Face model identifier |
 | `max_new_tokens` | `4096` | Maximum tokens for layout analysis |
 | `quantization` | `NONE` | Quantization mode: `NONE`, `INT8`, `INT4` |
 | `keep_empty_clusters` | `False` | Keep clusters without text cells |
@@ -412,7 +412,7 @@ The classifier can identify:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_repo_id` | `"Qwen/Qwen3-VL-8B-Thinking"` | Hugging Face model identifier |
+| `model_repo_id` | `"cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"` | Hugging Face model identifier |
 | `max_new_tokens` | `256` | Maximum tokens for classification |
 | `quantization` | `NONE` | Quantization mode: `NONE`, `INT8`, `INT4` |
 
@@ -452,7 +452,7 @@ Mathematical formulas are extracted and converted to LaTeX format for easy rende
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_repo_id` | `"Qwen/Qwen3-VL-8B-Thinking"` | Hugging Face model identifier |
+| `model_repo_id` | `"cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"` | Hugging Face model identifier |
 | `max_new_tokens` | `2048` | Maximum tokens for extraction |
 | `quantization` | `NONE` | Quantization mode: `NONE`, `INT8`, `INT4` |
 | `do_code_enrichment` | `True` | Enable code block detection |

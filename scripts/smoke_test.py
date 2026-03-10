@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from docling_ocr_qwen3vl import Qwen3VlOcrModel, Qwen3VlOcrOptions, Qwen3VlPromptMode
+from docling_ocr_qwen3vl.options import DEFAULT_QWEN3VL_MODEL_REPO_ID
 from docling_ocr_qwen3vl.plugins import ocr_engines
 from docling_ocr_qwen3vl.prompts import resolve_prompt
 
@@ -23,7 +24,7 @@ def main():
     print("Testing options...")
     opts = Qwen3VlOcrOptions()
     assert opts.kind == "qwen3vl_ocr"
-    assert opts.model_repo_id == "Qwen/Qwen3-VL-8B-Thinking"
+    assert opts.model_repo_id == DEFAULT_QWEN3VL_MODEL_REPO_ID
     print(f"  Options OK: {opts.kind}")
 
     print("Testing prompts...")
