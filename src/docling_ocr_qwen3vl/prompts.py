@@ -84,6 +84,22 @@ Example:
 Output ONLY the JSON array."""
 
 
+# Shorter prompts for constrained (jsonformer) generation — the schema is
+# injected by VLMJsonformer automatically, so we only need the task description.
+LAYOUT_JSONFORMER_PROMPT = (
+    "Detect every document element in this page image. "
+    "Types: title, section_header, text, list_item, table, picture, "
+    "caption, footnote, page_header, page_footer, formula, code. "
+    "Coordinates are integers 0-1000 (top-left origin)."
+)
+
+TABLE_JSONFORMER_PROMPT = (
+    "Extract the table structure from this image. "
+    "Row/col are 0-indexed. rs/cs default to 1. hdr is true for header cells. "
+    "Coordinates are integers 0-1000 relative to the table image."
+)
+
+
 # Prompt for picture classification
 PICTURE_CLASSIFICATION_PROMPT = """Classify this image into one or more categories.
 

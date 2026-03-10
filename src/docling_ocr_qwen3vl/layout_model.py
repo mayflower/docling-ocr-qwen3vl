@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -19,75 +18,29 @@ try:
 except ImportError:
     from docling.datamodel.pipeline_options import LayoutOptions as BaseLayoutOptions
 
-from ._model_registry import extract_after_think_token, get_model, maybe_empty_cache
+from ._model_registry import get_model, maybe_empty_cache
+from ._vlm_jsonformer import VLMJsonformer
 from .options import Qwen3VlLayoutOptions
-from .prompts import LAYOUT_ANALYSIS_PROMPT
+from .prompts import LAYOUT_JSONFORMER_PROMPT
 
 
 _log = logging.getLogger(__name__)
 
 
-def _repair_json(text: str) -> str:
-    """Try to fix common JSON issues produced by small VLMs."""
-    s = text.strip()
-    # Remove trailing commas before ] or }
-    s = re.sub(r",\s*([}\]])", r"\1", s)
-    # Ensure the array is closed
-    if s.startswith("[") and not s.endswith("]"):
-        # Find the last complete object and close the array
-        last_brace = s.rfind("}")
-        if last_brace > 0:
-            s = s[: last_brace + 1] + "]"
-    return s
-
-
-def _parse_layout_json(output_text: str, page_no: int) -> list[dict]:
-    """Parse layout JSON from model output with repair fallback."""
-    json_match = re.search(r"\[[\s\S]*\]", output_text)
-    if not json_match:
-        # Try to find a partial array and close it
-        partial = re.search(r"\[[\s\S]*", output_text)
-        if partial:
-            repaired = _repair_json(partial.group())
-            try:
-                elements = json.loads(repaired)
-                _log.info(
-                    "Layout JSON repaired for page %s (%d elements)",
-                    page_no,
-                    len(elements),
-                )
-                return elements
-            except json.JSONDecodeError:
-                pass
-        _log.warning(
-            "No JSON array found in layout output (page %s): %s",
-            page_no,
-            output_text[:300],
-        )
-        return []
-
-    raw = json_match.group()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        _log.debug("Layout JSON parse failed (page %s), attempting repair: %s", page_no, e)
-        repaired = _repair_json(raw)
-        try:
-            elements = json.loads(repaired)
-            _log.info(
-                "Layout JSON repaired for page %s (%d elements)",
-                page_no,
-                len(elements),
-            )
-            return elements
-        except json.JSONDecodeError as e2:
-            _log.warning(
-                "Failed to parse layout JSON (page %s): %s\nRaw: %s",
-                page_no,
-                e2,
-                output_text[:300],
-            )
-            return []
+# JSON schema for constrained layout generation
+LAYOUT_SCHEMA: dict = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "label": {"type": "string"},
+            "x1": {"type": "number"},
+            "y1": {"type": "number"},
+            "x2": {"type": "number"},
+            "y2": {"type": "number"},
+        },
+    },
+}
 
 
 # Map from prompt labels to DocItemLabel
@@ -165,61 +118,32 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
         return predictions
 
     def _analyze_layout(self, page_image, page: Page) -> list[Cluster]:
-        """Analyze page layout using Qwen3-VL."""
-        import torch
-
+        """Analyze page layout using Qwen3-VL with constrained JSON generation."""
         assert self._shared is not None
         model = self._shared.model
         processor = self._shared.processor
 
         image_rgb = page_image.convert("RGB")
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image_rgb},
-                    {"type": "text", "text": LAYOUT_ANALYSIS_PROMPT},
-                ],
-            }
-        ]
-
-        text_input = processor.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
+        jsonformer = VLMJsonformer(
+            model=model,
+            processor=processor,
+            json_schema=LAYOUT_SCHEMA,
+            prompt=LAYOUT_JSONFORMER_PROMPT,
+            image=image_rgb,
+            max_array_length=30,
+            max_number_tokens=4,
+            max_string_token_length=10,
         )
 
-        inputs = processor(
-            text=[text_input],
-            images=[image_rgb],
-            padding=True,
-            return_tensors="pt",
-        )
-        inputs = inputs.to(model.device)
-
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=self.options.max_new_tokens,
-                do_sample=False,
-            )
-
-        input_len = inputs["input_ids"].shape[1]
-        generated_ids = generated_ids[:, input_len:]
-        generated_ids = extract_after_think_token(generated_ids)
-
-        output_text = processor.batch_decode(
-            generated_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True,
-        )[0]
-
+        elements = jsonformer()
         maybe_empty_cache()
 
-        _log.debug("Layout model raw output (page %s): %s", page.page_no, output_text[:500])
-
-        elements = _parse_layout_json(output_text, page.page_no)
+        _log.debug(
+            "Layout jsonformer output (page %s): %s",
+            page.page_no,
+            json.dumps(elements)[:500],
+        )
 
         # Convert to Cluster objects
         return self._build_clusters(elements, page)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -21,59 +20,41 @@ except ImportError:
         TableStructureOptions as BaseTableStructureOptions,
     )
 
-from ._model_registry import extract_after_think_token, get_model, maybe_empty_cache
+from ._model_registry import get_model, maybe_empty_cache
+from ._vlm_jsonformer import VLMJsonformer
 from .options import Qwen3VlTableStructureOptions
-from .prompts import TABLE_STRUCTURE_PROMPT
+from .prompts import TABLE_JSONFORMER_PROMPT
 
 
 _log = logging.getLogger(__name__)
 
 
-def _repair_json_obj(text: str) -> str:
-    """Try to fix common JSON issues in object output."""
-    s = text.strip()
-    s = re.sub(r",\s*([}\]])", r"\1", s)
-    # Ensure trailing braces are closed
-    opens = s.count("{") + s.count("[")
-    closes = s.count("}") + s.count("]")
-    if opens > closes:
-        # Close arrays then objects
-        arr_diff = s.count("[") - s.count("]")
-        obj_diff = s.count("{") - s.count("}")
-        s += "]" * max(arr_diff, 0) + "}" * max(obj_diff, 0)
-    return s
-
-
-def _parse_table_json(output_text: str) -> dict | None:
-    """Parse table structure JSON with repair fallback."""
-    json_match = re.search(r"\{[\s\S]*\}", output_text)
-    raw = json_match.group() if json_match else None
-
-    if not raw:
-        partial = re.search(r"\{[\s\S]*", output_text)
-        if partial:
-            repaired = _repair_json_obj(partial.group())
-            try:
-                data = json.loads(repaired)
-                _log.info("Table JSON repaired (%d cells)", len(data.get("cells", [])))
-                return data
-            except json.JSONDecodeError:
-                pass
-        _log.warning("No JSON found in table structure output: %s", output_text[:300])
-        return None
-
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        _log.debug("Table JSON parse failed, attempting repair: %s", e)
-        repaired = _repair_json_obj(raw)
-        try:
-            data = json.loads(repaired)
-            _log.info("Table JSON repaired (%d cells)", len(data.get("cells", [])))
-            return data
-        except json.JSONDecodeError as e2:
-            _log.warning("Failed to parse table structure JSON: %s\nRaw: %s", e2, output_text[:300])
-            return None
+# JSON schema for constrained table structure generation
+TABLE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "rows": {"type": "number"},
+        "cols": {"type": "number"},
+        "cells": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "row": {"type": "number"},
+                    "col": {"type": "number"},
+                    "text": {"type": "string"},
+                    "rs": {"type": "number"},
+                    "cs": {"type": "number"},
+                    "hdr": {"type": "boolean"},
+                    "x1": {"type": "number"},
+                    "y1": {"type": "number"},
+                    "x2": {"type": "number"},
+                    "y2": {"type": "number"},
+                },
+            },
+        },
+    },
+}
 
 
 class Qwen3VlTableStructureModel(BaseTableStructureModel):
@@ -154,62 +135,30 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
         table_bbox: BoundingBox,
         page: Page,
     ) -> Table | None:
-        """Extract table structure from an image using Qwen3-VL."""
-        import torch
-
+        """Extract table structure from an image using constrained JSON generation."""
         assert self._shared is not None
         model = self._shared.model
         processor = self._shared.processor
 
         image_rgb = table_image.convert("RGB")
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image_rgb},
-                    {"type": "text", "text": TABLE_STRUCTURE_PROMPT},
-                ],
-            }
-        ]
-
-        text_input = processor.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
+        jsonformer = VLMJsonformer(
+            model=model,
+            processor=processor,
+            json_schema=TABLE_SCHEMA,
+            prompt=TABLE_JSONFORMER_PROMPT,
+            image=image_rgb,
+            max_array_length=50,
+            max_number_tokens=4,
+            max_string_token_length=50,
         )
 
-        inputs = processor(
-            text=[text_input],
-            images=[image_rgb],
-            padding=True,
-            return_tensors="pt",
-        )
-        inputs = inputs.to(model.device)
-
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=self.options.max_new_tokens,
-                do_sample=False,
-            )
-
-        input_len = inputs["input_ids"].shape[1]
-        generated_ids = generated_ids[:, input_len:]
-        generated_ids = extract_after_think_token(generated_ids)
-
-        output_text = processor.batch_decode(
-            generated_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True,
-        )[0]
-
+        data = jsonformer()
         maybe_empty_cache()
 
-        _log.debug("Table structure raw output: %s", output_text[:500])
+        _log.debug("Table jsonformer output: %s", json.dumps(data)[:500])
 
-        data = _parse_table_json(output_text)
-        if data is None:
+        if not data:
             return None
 
         # Convert to Table object
@@ -222,8 +171,8 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
         page: Page,
     ) -> Table | None:
         """Build a Table object from parsed JSON data."""
-        num_rows = data.get("rows", 0)
-        num_cols = data.get("cols", 0)
+        num_rows = int(data.get("rows", 0))
+        num_cols = int(data.get("cols", 0))
         cells_data = data.get("cells", [])
 
         if num_rows == 0 or num_cols == 0:
@@ -244,10 +193,10 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
         # Convert cells — support both old (row_span/col_span/is_header/bbox)
         # and new compact (rs/cs/hdr/x1,y1,x2,y2) field names.
         for cell_data in cells_data:
-            row = cell_data.get("row", 0)
-            col = cell_data.get("col", 0)
-            row_span = cell_data.get("row_span", cell_data.get("rs", 1))
-            col_span = cell_data.get("col_span", cell_data.get("cs", 1))
+            row = int(cell_data.get("row", 0))
+            col = int(cell_data.get("col", 0))
+            row_span = int(cell_data.get("row_span", cell_data.get("rs", 1)))
+            col_span = int(cell_data.get("col_span", cell_data.get("cs", 1)))
             text = cell_data.get("text", "")
             is_header = cell_data.get("is_header", cell_data.get("hdr", False))
 
