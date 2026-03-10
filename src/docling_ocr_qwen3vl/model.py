@@ -115,6 +115,13 @@ class Qwen3VlOcrModel(BaseOcrModel):
                         len(all_ocr_cells),
                         sample,
                     )
+                    # Log bbox samples for debugging coordinate alignment
+                    for cell in all_ocr_cells[:2]:
+                        bb = cell.rect.to_bounding_box()
+                        _log.debug(
+                            "  OCR cell bbox: l=%.1f t=%.1f r=%.1f b=%.1f text='%s'",
+                            bb.l, bb.t, bb.r, bb.b, cell.text[:30],
+                        )
                     self._debug_logged_pages.add(page.page_no)
 
             if settings.debug.visualize_ocr:
@@ -191,8 +198,9 @@ class Qwen3VlOcrModel(BaseOcrModel):
     ) -> list[TextCell]:
         """Convert HTML elements with bounding boxes into Docling TextCells.
 
-        The bounding boxes from QwenVL HTML are in image pixel coordinates.
-        We scale them to match the OCR region in document coordinates.
+        The bounding boxes from QwenVL HTML use data-bbox with 0-1000
+        normalized coordinates (as specified in QWENVL_HTML_SYSTEM_PROMPT).
+        We scale them from 0-1000 to the OCR region's document coordinates.
         """
         from .qwen_runner import HtmlElement
 
@@ -201,13 +209,12 @@ class Qwen3VlOcrModel(BaseOcrModel):
         if not html_elements:
             return cells
 
-        img_width, img_height = image_size
         region_width = rect.r - rect.l
         region_height = rect.b - rect.t
 
-        # Scale factors to convert image coordinates to document coordinates
-        scale_x = region_width / img_width if img_width > 0 else 1.0
-        scale_y = region_height / img_height if img_height > 0 else 1.0
+        # QwenVL HTML data-bbox values are in 0-1000 normalized coordinates
+        scale_x = region_width / 1000.0
+        scale_y = region_height / 1000.0
 
         for element in html_elements:
             if not isinstance(element, HtmlElement):
@@ -218,7 +225,7 @@ class Qwen3VlOcrModel(BaseOcrModel):
                 continue
 
             if element.bbox:
-                # Use real bounding box from QwenVL HTML
+                # Use real bounding box from QwenVL HTML (0-1000 scale)
                 x1, y1, x2, y2 = element.bbox
                 bbox = BoundingBox(
                     l=rect.l + (x1 * scale_x),

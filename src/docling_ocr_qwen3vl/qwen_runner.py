@@ -163,7 +163,13 @@ class Qwen3VlRunner:
 
         # Handle QWENVL_HTML mode specially - parse HTML with bounding boxes
         if prompt_mode == Qwen3VlPromptMode.QWENVL_HTML:
+            _log.debug("QWENVL_HTML raw output: %s", output_text[:500])
             html_elements = _parse_qwenvl_html(output_text)
+            _log.debug(
+                "QWENVL_HTML parsed %d elements, %d with bbox",
+                len(html_elements),
+                sum(1 for e in html_elements if e.bbox is not None),
+            )
             # Extract plain text from HTML elements for compatibility
             plain_text = "\n\n".join(el.text for el in html_elements if el.text.strip())
             paragraphs = [el.text for el in html_elements if el.text.strip()]
