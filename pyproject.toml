@@ -14,14 +14,13 @@ dependencies = [
     "torch>=2.0.0",
     "transformers>=4.51.0",
     "accelerate>=0.33.0",
-    "compressed-tensors",
+    "bitsandbytes>=0.43.0; sys_platform == 'linux'",
     "Pillow",
     "qwen-vl-utils",
 ]
 
 [project.optional-dependencies]
 test = ["pytest"]
-quantization = ["bitsandbytes>=0.43.0"]
 
 [project.entry-points."docling"]
 qwen3vl_ocr = "docling_ocr_qwen3vl.plugins"

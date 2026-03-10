@@ -22,7 +22,7 @@ except ImportError:
         TableStructureOptions as BaseTableStructureOptions,
     )
 
-DEFAULT_QWEN3VL_MODEL_REPO_ID = "cyankiwi/Qwen3-VL-4B-Thinking-AWQ-4bit"
+DEFAULT_QWEN3VL_MODEL_REPO_ID = "unsloth/Qwen3-VL-4B-Thinking-unsloth-bnb-4bit"
 _HF_CACHE_REPO_DIR_PATTERN = re.compile(r"^(?:models--)?(?P<owner>[^/\\]+)--(?P<repo>[^/\\]+)$")
 
 

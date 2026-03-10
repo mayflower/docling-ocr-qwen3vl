@@ -116,6 +116,7 @@ def _load(
 
     model_kwargs: dict = {
         "trust_remote_code": trust_remote_code,
+        "device_map": "auto",
     }
     if torch_dtype is not None:
         model_kwargs["torch_dtype"] = torch_dtype
@@ -137,7 +138,7 @@ def _load(
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         model_repo_id,
         **model_kwargs,
-    ).to(torch_device).eval()
+    ).eval()
 
     return SharedModel(model=model, processor=processor, device=torch_device)
 
