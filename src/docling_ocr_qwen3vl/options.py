@@ -151,7 +151,7 @@ class Qwen3VlOcrOptions(OcrOptions):
         description="Additional kwargs forwarded to the underlying model loader.",
     )
     attn_implementation: str = Field(
-        default="flash_attention_2",
+        default="sdpa",
         description="Attention implementation hint passed to the model.",
     )
     page_scale: float = Field(
@@ -228,7 +228,7 @@ class Qwen3VlPictureDescriptionOptions(PictureDescriptionBaseOptions):
         description="Allow loading custom model code from the repository.",
     )
     attn_implementation: str = Field(
-        default="flash_attention_2",
+        default="sdpa",
         description="Attention implementation hint passed to the model.",
     )
     quantization: Qwen3VlQuantization = Field(
@@ -290,7 +290,7 @@ class Qwen3VlTableStructureOptions(BaseTableStructureOptions):
         description="Allow loading custom model code from the repository.",
     )
     attn_implementation: str = Field(
-        default="flash_attention_2",
+        default="sdpa",
         description="Attention implementation hint passed to the model.",
     )
     quantization: Qwen3VlQuantization = Field(
@@ -352,7 +352,7 @@ class Qwen3VlLayoutOptions(BaseLayoutOptions):
         description="Allow loading custom model code from the repository.",
     )
     attn_implementation: str = Field(
-        default="flash_attention_2",
+        default="sdpa",
         description="Attention implementation hint passed to the model.",
     )
     quantization: Qwen3VlQuantization = Field(
@@ -410,7 +410,7 @@ class Qwen3VlPictureClassifierOptions(BaseModel):
         description="Allow loading custom model code from the repository.",
     )
     attn_implementation: str = Field(
-        default="flash_attention_2",
+        default="sdpa",
         description="Attention implementation hint passed to the model.",
     )
     quantization: Qwen3VlQuantization = Field(
@@ -468,7 +468,7 @@ class Qwen3VlCodeFormulaOptions(BaseModel):
         description="Allow loading custom model code from the repository.",
     )
     attn_implementation: str = Field(
-        default="flash_attention_2",
+        default="sdpa",
         description="Attention implementation hint passed to the model.",
     )
     quantization: Qwen3VlQuantization = Field(

@@ -39,7 +39,7 @@ def get_model(
     dtype: str | None = "bfloat16",
     trust_remote_code: bool = True,
     hf_token: str | None = None,
-    attn_implementation: str = "flash_attention_2",
+    attn_implementation: str = "sdpa",
     quantization: Qwen3VlQuantization = Qwen3VlQuantization.NONE,
     bnb_4bit_quant_type: str = "nf4",
     bnb_4bit_use_double_quant: bool = True,
@@ -168,9 +168,9 @@ def select_attention_backend(requested: str) -> str | None:
             import flash_attn  # noqa: F401
         except ImportError:
             _log.warning(
-                "flash-attn is not installed; falling back to eager attention."
+                "flash-attn is not installed; falling back to sdpa attention."
             )
-            return "eager"
+            return "sdpa"
     return requested
 
 
