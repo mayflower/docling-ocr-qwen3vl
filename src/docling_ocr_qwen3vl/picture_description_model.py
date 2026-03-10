@@ -30,11 +30,13 @@ class Qwen3VlPictureDescriptionModel(PictureDescriptionBaseModel):
 
     def __init__(
         self,
-        enabled: bool,
-        enable_remote_services: bool,
-        artifacts_path: Path | str | None,
+        *,
+        enabled: bool = True,
+        enable_remote_services: bool = False,
+        artifacts_path: Path | str | None = None,
         options: Qwen3VlPictureDescriptionOptions,
         accelerator_options: AcceleratorOptions,
+        **kwargs,
     ):
         super().__init__(
             enabled=enabled,

@@ -54,10 +54,10 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
 
     def __init__(
         self,
-        enabled: bool,
         artifacts_path: Path | None,
-        options: Qwen3VlLayoutOptions,
         accelerator_options: AcceleratorOptions,
+        options: Qwen3VlLayoutOptions,
+        enabled: bool = True,
         **kwargs,
     ):
         self.enabled = enabled

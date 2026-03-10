@@ -51,13 +51,13 @@ def build_request_body(pdf_url: str) -> dict:
             "table_structure_custom_config": {"kind": "qwen3vl_table"},
             # Layout with Qwen3-VL
             "layout_custom_config": {"kind": "qwen3vl_layout"},
-            # Picture description with Qwen3-VL
-            "do_picture_description": True,
-            "picture_description_custom_config": {"kind": "qwen3vl"},
-            # Code & formula enrichment with Qwen3-VL
-            "do_code_enrichment": True,
-            "do_formula_enrichment": True,
-            "code_formula_custom_config": {"kind": "qwen3vl_code_formula"},
+            # Picture description & code/formula with Qwen3-VL
+            # NOTE: custom_config requires PictureDescriptionVlmEngineOptions
+            # format which differs from our plugin options. These need
+            # server-side preset registration to work via the API.
+            "do_picture_description": False,
+            "do_code_enrichment": False,
+            "do_formula_enrichment": False,
         },
     }
 

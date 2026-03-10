@@ -38,10 +38,10 @@ class Qwen3VlPictureClassifierModel(BaseItemAndImageEnrichmentModel):
 
     def __init__(
         self,
-        enabled: bool,
-        artifacts_path: Path | None,
-        options: Qwen3VlPictureClassifierOptions,
-        accelerator_options: AcceleratorOptions,
+        enabled: bool = True,
+        artifacts_path: Path | None = None,
+        options: Qwen3VlPictureClassifierOptions | None = None,
+        accelerator_options: AcceleratorOptions | None = None,
         **kwargs,
     ):
         self.enabled = enabled

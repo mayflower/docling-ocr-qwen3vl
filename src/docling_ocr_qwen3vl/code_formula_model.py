@@ -61,10 +61,10 @@ class Qwen3VlCodeFormulaModel(BaseItemAndImageEnrichmentModel):
 
     def __init__(
         self,
-        enabled: bool,
-        artifacts_path: Path | None,
-        options: Qwen3VlCodeFormulaOptions,
-        accelerator_options: AcceleratorOptions,
+        enabled: bool = True,
+        artifacts_path: Path | None = None,
+        options: Qwen3VlCodeFormulaOptions | None = None,
+        accelerator_options: AcceleratorOptions | None = None,
         **kwargs,
     ):
         self.enabled = enabled
