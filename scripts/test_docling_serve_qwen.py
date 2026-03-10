@@ -37,7 +37,7 @@ console = Console()
 
 
 def build_request_body(pdf_url: str) -> dict:
-    """Build JSON request body with Qwen3-VL OCR."""
+    """Build JSON request body with full Qwen3-VL pipeline."""
     return {
         "sources": [{"kind": "http", "url": pdf_url}],
         "options": {
@@ -46,8 +46,18 @@ def build_request_body(pdf_url: str) -> dict:
             "do_ocr": True,
             "force_ocr": True,
             "ocr_engine": "qwen3vl_ocr",
-            # Table structure (default engine, Qwen3-VL table not yet stable via API)
+            # Table structure with Qwen3-VL
             "do_table_structure": True,
+            "table_structure_custom_config": {"kind": "qwen3vl_table"},
+            # Layout with Qwen3-VL
+            "layout_custom_config": {"kind": "qwen3vl_layout"},
+            # Picture description with Qwen3-VL
+            "do_picture_description": True,
+            "picture_description_custom_config": {"kind": "qwen3vl"},
+            # Code & formula enrichment with Qwen3-VL
+            "do_code_enrichment": True,
+            "do_formula_enrichment": True,
+            "code_formula_custom_config": {"kind": "qwen3vl_code_formula"},
         },
     }
 
@@ -159,7 +169,7 @@ def main() -> None:
         f"Server:  {args.base_url}\n"
         f"PDF:     {args.pdf_url}\n"
         f"Timeout: {args.timeout}s\n\n"
-        f"Features: OCR (qwen3vl_ocr, force_ocr) + Table Structure",
+        f"Features: Full Qwen3-VL pipeline (OCR, table, layout, pictures, code/formula)",
         border_style="blue",
     ))
 

@@ -42,6 +42,7 @@ class Qwen3VlPictureClassifierModel(BaseItemAndImageEnrichmentModel):
         artifacts_path: Path | None,
         options: Qwen3VlPictureClassifierOptions,
         accelerator_options: AcceleratorOptions,
+        **kwargs,
     ):
         self.enabled = enabled
         self.options = options

@@ -42,6 +42,7 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
         artifacts_path: Path | None,
         options: Qwen3VlTableStructureOptions,
         accelerator_options: AcceleratorOptions,
+        **kwargs,
     ):
         self.enabled = enabled
         self.options = options

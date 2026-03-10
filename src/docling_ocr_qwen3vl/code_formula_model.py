@@ -65,6 +65,7 @@ class Qwen3VlCodeFormulaModel(BaseItemAndImageEnrichmentModel):
         artifacts_path: Path | None,
         options: Qwen3VlCodeFormulaOptions,
         accelerator_options: AcceleratorOptions,
+        **kwargs,
     ):
         self.enabled = enabled
         self.options = options

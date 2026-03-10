@@ -58,6 +58,7 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
         artifacts_path: Path | None,
         options: Qwen3VlLayoutOptions,
         accelerator_options: AcceleratorOptions,
+        **kwargs,
     ):
         self.enabled = enabled
         self.options = options
