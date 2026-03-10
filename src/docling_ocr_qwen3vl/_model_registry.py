@@ -116,7 +116,6 @@ def _load(
 
     model_kwargs: dict = {
         "trust_remote_code": trust_remote_code,
-        "device_map": "auto" if torch_device.type == "cuda" else None,
     }
     if torch_dtype is not None:
         model_kwargs["torch_dtype"] = torch_dtype
@@ -138,10 +137,7 @@ def _load(
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         model_repo_id,
         **model_kwargs,
-    )
-
-    setattr(model, '_is_in_eval', True)  # noqa: B010
-    model = model.eval()
+    ).to(torch_device).eval()
 
     return SharedModel(model=model, processor=processor, device=torch_device)
 
