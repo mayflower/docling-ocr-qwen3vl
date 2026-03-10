@@ -326,6 +326,14 @@ class Qwen3VlLayoutOptions(BaseLayoutOptions):
 
     kind: ClassVar[Literal["qwen3vl_layout"]] = "qwen3vl_layout"
 
+    # BaseLayoutOptions may not include create_orphan_clusters (added in
+    # LayoutOptions).  LayoutPostprocessor reads it, so we declare it here
+    # to ensure compatibility across docling versions.
+    create_orphan_clusters: bool = Field(
+        default=True,
+        description="Wrap unmatched OCR cells in individual TEXT clusters.",
+    )
+
     model_repo_id: str = Field(
         default=DEFAULT_QWEN3VL_MODEL_REPO_ID,
         description="Hugging Face repository identifier for the Qwen3-VL model.",
