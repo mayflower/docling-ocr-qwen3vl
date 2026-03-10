@@ -55,68 +55,33 @@ def resolve_prompt(mode: Qwen3VlPromptMode, overrides: dict[str, str]) -> str:
     return DEFAULT_PROMPTS[mode]
 
 
-# Prompt for table structure extraction
-TABLE_STRUCTURE_PROMPT = """Analyze the table in this image and extract its structure.
+# Prompt for table structure extraction — flat coordinates to avoid
+# nested-array formatting errors from small VLMs.
+TABLE_STRUCTURE_PROMPT = """Extract the table structure from this image.
 
-Output a JSON object with the following format:
-{
-  "rows": <number of rows>,
-  "cols": <number of columns>,
-  "cells": [
-    {
-      "row": <0-indexed row>,
-      "col": <0-indexed column>,
-      "row_span": <number of rows spanned, default 1>,
-      "col_span": <number of columns spanned, default 1>,
-      "text": "<cell text content>",
-      "is_header": <true if header cell, false otherwise>,
-      "bbox": [x1, y1, x2, y2]
-    },
-    ...
-  ]
-}
+Return a JSON object:
+{"rows":<int>,"cols":<int>,"cells":[{"row":<int>,"col":<int>,"text":"<content>","rs":<row_span>,"cs":<col_span>,"hdr":<true/false>,"x1":<int>,"y1":<int>,"x2":<int>,"y2":<int>},...]}
 
-Rules:
-- Coordinates are in [0, 1000] scale relative to the table image
-- Include ALL cells, including merged cells
-- For merged cells, use row_span and col_span > 1
-- is_header should be true for header rows/columns
-- Output ONLY valid JSON, no explanations"""
+Coordinates are integers 0-1000 relative to the table image.
+Row/col are 0-indexed. rs/cs default to 1. hdr is true for header cells.
+
+Output ONLY the JSON object."""
 
 
-# Prompt for layout analysis
-LAYOUT_ANALYSIS_PROMPT = """Analyze the document layout in this image.
+# Prompt for layout analysis — uses flat coordinate fields to avoid
+# nested-array formatting errors from small VLMs.
+LAYOUT_ANALYSIS_PROMPT = """Detect every document element in this page image.
 
-Identify all document elements and output a JSON array with the following format:
-[
-  {
-    "label": "<element type>",
-    "bbox": [x1, y1, x2, y2],
-    "confidence": <0.0 to 1.0>,
-    "text": "<text content if applicable>"
-  },
-  ...
-]
+Return a JSON array. Each element has these fields:
+{"label":"<type>","x1":<int>,"y1":<int>,"x2":<int>,"y2":<int>}
 
-Element types (use exactly these labels):
-- "title" - Main document title
-- "section_header" - Section headings
-- "text" - Regular paragraph text
-- "list_item" - List items (bulleted or numbered)
-- "table" - Table regions
-- "picture" - Images, figures, diagrams
-- "caption" - Figure/table captions
-- "footnote" - Footnotes
-- "page_header" - Page headers
-- "page_footer" - Page footers
-- "formula" - Mathematical formulas
-- "code" - Code blocks
+Coordinates are integers 0-1000 (top-left origin).
+Types: title, section_header, text, list_item, table, picture, caption, footnote, page_header, page_footer, formula, code
 
-Rules:
-- Coordinates are in [0, 1000] scale relative to the page
-- Include ALL visible elements
-- Maintain reading order (top to bottom, left to right)
-- Output ONLY valid JSON array, no explanations"""
+Example:
+[{"label":"title","x1":50,"y1":20,"x2":950,"y2":80},{"label":"text","x1":50,"y1":100,"x2":950,"y2":400}]
+
+Output ONLY the JSON array."""
 
 
 # Prompt for picture classification

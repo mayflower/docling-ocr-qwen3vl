@@ -26,6 +26,70 @@ from .prompts import LAYOUT_ANALYSIS_PROMPT
 
 _log = logging.getLogger(__name__)
 
+
+def _repair_json(text: str) -> str:
+    """Try to fix common JSON issues produced by small VLMs."""
+    s = text.strip()
+    # Remove trailing commas before ] or }
+    s = re.sub(r",\s*([}\]])", r"\1", s)
+    # Ensure the array is closed
+    if s.startswith("[") and not s.endswith("]"):
+        # Find the last complete object and close the array
+        last_brace = s.rfind("}")
+        if last_brace > 0:
+            s = s[: last_brace + 1] + "]"
+    return s
+
+
+def _parse_layout_json(output_text: str, page_no: int) -> list[dict]:
+    """Parse layout JSON from model output with repair fallback."""
+    json_match = re.search(r"\[[\s\S]*\]", output_text)
+    if not json_match:
+        # Try to find a partial array and close it
+        partial = re.search(r"\[[\s\S]*", output_text)
+        if partial:
+            repaired = _repair_json(partial.group())
+            try:
+                elements = json.loads(repaired)
+                _log.info(
+                    "Layout JSON repaired for page %s (%d elements)",
+                    page_no,
+                    len(elements),
+                )
+                return elements
+            except json.JSONDecodeError:
+                pass
+        _log.warning(
+            "No JSON array found in layout output (page %s): %s",
+            page_no,
+            output_text[:300],
+        )
+        return []
+
+    raw = json_match.group()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        _log.debug("Layout JSON parse failed (page %s), attempting repair: %s", page_no, e)
+        repaired = _repair_json(raw)
+        try:
+            elements = json.loads(repaired)
+            _log.info(
+                "Layout JSON repaired for page %s (%d elements)",
+                page_no,
+                len(elements),
+            )
+            return elements
+        except json.JSONDecodeError as e2:
+            _log.warning(
+                "Failed to parse layout JSON (page %s): %s\nRaw: %s",
+                page_no,
+                e2,
+                output_text[:300],
+            )
+            return []
+
+
 # Map from prompt labels to DocItemLabel
 LABEL_MAP = {
     "title": DocItemLabel.TITLE,
@@ -155,17 +219,7 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
 
         _log.debug("Layout model raw output (page %s): %s", page.page_no, output_text[:500])
 
-        # Parse JSON output
-        try:
-            json_match = re.search(r"\[[\s\S]*\]", output_text)
-            if not json_match:
-                _log.warning("No JSON array found in layout output (page %s): %s", page.page_no, output_text[:300])
-                return []
-
-            elements = json.loads(json_match.group())
-        except json.JSONDecodeError as e:
-            _log.warning("Failed to parse layout JSON (page %s): %s\nRaw: %s", page.page_no, e, output_text[:300])
-            return []
+        elements = _parse_layout_json(output_text, page.page_no)
 
         # Convert to Cluster objects
         return self._build_clusters(elements, page)
@@ -176,15 +230,23 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
 
         for idx, elem in enumerate(elements):
             label_str = elem.get("label", "text").lower()
-            bbox_data = elem.get("bbox", [0, 0, 1000, 1000])
             confidence = elem.get("confidence", 0.9)
 
             # Map label string to DocItemLabel
             label = LABEL_MAP.get(label_str, DocItemLabel.TEXT)
 
-            # Convert bbox from 0-1000 scale to page coordinates
-            if page.size and len(bbox_data) == 4:
+            # Support both flat (x1,y1,x2,y2) and nested (bbox) coordinate formats
+            bbox_data = elem.get("bbox")
+            if bbox_data and len(bbox_data) == 4:
                 x1, y1, x2, y2 = bbox_data
+            else:
+                x1 = elem.get("x1", 0)
+                y1 = elem.get("y1", 0)
+                x2 = elem.get("x2", 1000)
+                y2 = elem.get("y2", 1000)
+
+            # Convert bbox from 0-1000 scale to page coordinates
+            if page.size:
                 bbox = BoundingBox(
                     l=(x1 / 1000) * page.size.width,
                     t=(y1 / 1000) * page.size.height,

@@ -29,6 +29,53 @@ from .prompts import TABLE_STRUCTURE_PROMPT
 _log = logging.getLogger(__name__)
 
 
+def _repair_json_obj(text: str) -> str:
+    """Try to fix common JSON issues in object output."""
+    s = text.strip()
+    s = re.sub(r",\s*([}\]])", r"\1", s)
+    # Ensure trailing braces are closed
+    opens = s.count("{") + s.count("[")
+    closes = s.count("}") + s.count("]")
+    if opens > closes:
+        # Close arrays then objects
+        arr_diff = s.count("[") - s.count("]")
+        obj_diff = s.count("{") - s.count("}")
+        s += "]" * max(arr_diff, 0) + "}" * max(obj_diff, 0)
+    return s
+
+
+def _parse_table_json(output_text: str) -> dict | None:
+    """Parse table structure JSON with repair fallback."""
+    json_match = re.search(r"\{[\s\S]*\}", output_text)
+    raw = json_match.group() if json_match else None
+
+    if not raw:
+        partial = re.search(r"\{[\s\S]*", output_text)
+        if partial:
+            repaired = _repair_json_obj(partial.group())
+            try:
+                data = json.loads(repaired)
+                _log.info("Table JSON repaired (%d cells)", len(data.get("cells", [])))
+                return data
+            except json.JSONDecodeError:
+                pass
+        _log.warning("No JSON found in table structure output: %s", output_text[:300])
+        return None
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        _log.debug("Table JSON parse failed, attempting repair: %s", e)
+        repaired = _repair_json_obj(raw)
+        try:
+            data = json.loads(repaired)
+            _log.info("Table JSON repaired (%d cells)", len(data.get("cells", [])))
+            return data
+        except json.JSONDecodeError as e2:
+            _log.warning("Failed to parse table structure JSON: %s\nRaw: %s", e2, output_text[:300])
+            return None
+
+
 class Qwen3VlTableStructureModel(BaseTableStructureModel):
     """Qwen3-VL based table structure detection model.
 
@@ -161,17 +208,8 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
 
         _log.debug("Table structure raw output: %s", output_text[:500])
 
-        # Parse JSON output
-        try:
-            # Extract JSON from output
-            json_match = re.search(r"\{[\s\S]*\}", output_text)
-            if not json_match:
-                _log.warning("No JSON found in table structure output: %s", output_text[:300])
-                return None
-
-            data = json.loads(json_match.group())
-        except json.JSONDecodeError as e:
-            _log.warning("Failed to parse table structure JSON: %s\nRaw: %s", e, output_text[:300])
+        data = _parse_table_json(output_text)
+        if data is None:
             return None
 
         # Convert to Table object
@@ -203,15 +241,22 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
                     otsl_seq.append("l")
                 otsl_seq.append("cell")
 
-        # Convert cells
+        # Convert cells — support both old (row_span/col_span/is_header/bbox)
+        # and new compact (rs/cs/hdr/x1,y1,x2,y2) field names.
         for cell_data in cells_data:
             row = cell_data.get("row", 0)
             col = cell_data.get("col", 0)
-            row_span = cell_data.get("row_span", 1)
-            col_span = cell_data.get("col_span", 1)
+            row_span = cell_data.get("row_span", cell_data.get("rs", 1))
+            col_span = cell_data.get("col_span", cell_data.get("cs", 1))
             text = cell_data.get("text", "")
-            is_header = cell_data.get("is_header", False)
+            is_header = cell_data.get("is_header", cell_data.get("hdr", False))
+
+            # Support both nested bbox array and flat x1/y1/x2/y2
             bbox = cell_data.get("bbox", None)
+            if not bbox or not isinstance(bbox, list):
+                _x1 = cell_data.get("x1")
+                if _x1 is not None:
+                    bbox = [_x1, cell_data.get("y1", 0), cell_data.get("x2", 1000), cell_data.get("y2", 1000)]
 
             # Convert bbox from 0-1000 scale to page coordinates
             cell_bbox = None
