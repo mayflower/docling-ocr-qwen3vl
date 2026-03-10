@@ -19,8 +19,7 @@ QwenVL Document Parser HTML rules:
 - Do NOT output explanations before or after the HTML.
 - Output valid HTML that can be parsed with a standard HTML parser.
 
-If you need to reason step-by-step, think inside <think>...</think>.
-After </think>, output ONLY the final QwenVL HTML."""
+Output ONLY the final QwenVL HTML, no explanations."""
 
 
 # Default prompt templates for Qwen3-VL OCR.

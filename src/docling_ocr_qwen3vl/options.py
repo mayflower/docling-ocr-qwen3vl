@@ -22,7 +22,7 @@ except ImportError:
         TableStructureOptions as BaseTableStructureOptions,
     )
 
-DEFAULT_QWEN3VL_MODEL_REPO_ID = "unsloth/Qwen3-VL-4B-Thinking-unsloth-bnb-4bit"
+DEFAULT_QWEN3VL_MODEL_REPO_ID = "unsloth/Qwen3-VL-4B-Instruct-bnb-4bit"
 _HF_CACHE_REPO_DIR_PATTERN = re.compile(r"^(?:models--)?(?P<owner>[^/\\]+)--(?P<repo>[^/\\]+)$")
 
 
@@ -126,7 +126,7 @@ class Qwen3VlOcrOptions(OcrOptions):
         ge=1,
     )
     do_sample: bool = Field(
-        default=True,
+        default=False,
         description="Enable stochastic decoding.",
     )
     timeout_s: float | None = Field(
@@ -216,7 +216,7 @@ class Qwen3VlPictureDescriptionOptions(PictureDescriptionBaseOptions):
         ge=0.0,
     )
     do_sample: bool = Field(
-        default=True,
+        default=False,
         description="Enable stochastic decoding.",
     )
     hf_token: str | None = Field(
@@ -244,7 +244,7 @@ class Qwen3VlPictureDescriptionOptions(PictureDescriptionBaseOptions):
         description="Use nested quantization for additional memory savings.",
     )
     generation_config: dict[str, Any] = Field(
-        default_factory=lambda: {"max_new_tokens": 512, "do_sample": True, "temperature": 0.6},
+        default_factory=lambda: {"max_new_tokens": 512, "do_sample": False},
         description="Generation config passed to model.generate().",
     )
 
