@@ -159,17 +159,19 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
 
         maybe_empty_cache()
 
+        _log.debug("Table structure raw output: %s", output_text[:500])
+
         # Parse JSON output
         try:
             # Extract JSON from output
             json_match = re.search(r"\{[\s\S]*\}", output_text)
             if not json_match:
-                _log.warning("No JSON found in table structure output")
+                _log.warning("No JSON found in table structure output: %s", output_text[:300])
                 return None
 
             data = json.loads(json_match.group())
         except json.JSONDecodeError as e:
-            _log.warning("Failed to parse table structure JSON: %s", e)
+            _log.warning("Failed to parse table structure JSON: %s\nRaw: %s", e, output_text[:300])
             return None
 
         # Convert to Table object

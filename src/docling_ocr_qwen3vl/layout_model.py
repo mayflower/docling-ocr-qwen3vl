@@ -153,16 +153,18 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
 
         maybe_empty_cache()
 
+        _log.debug("Layout model raw output (page %s): %s", page.page_no, output_text[:500])
+
         # Parse JSON output
         try:
             json_match = re.search(r"\[[\s\S]*\]", output_text)
             if not json_match:
-                _log.warning("No JSON array found in layout output")
+                _log.warning("No JSON array found in layout output (page %s): %s", page.page_no, output_text[:300])
                 return []
 
             elements = json.loads(json_match.group())
         except json.JSONDecodeError as e:
-            _log.warning("Failed to parse layout JSON: %s", e)
+            _log.warning("Failed to parse layout JSON (page %s): %s\nRaw: %s", page.page_no, e, output_text[:300])
             return []
 
         # Convert to Cluster objects
