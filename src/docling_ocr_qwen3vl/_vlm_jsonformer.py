@@ -3,9 +3,14 @@
 Adapted from jsonformer (https://github.com/1rgs/jsonformer) to support
 Qwen3-VL and similar VLMs that require image inputs alongside text prompts.
 
-The key idea: the model only generates *values* (strings, numbers, booleans).
-All structural tokens (braces, brackets, colons, commas, key names) are
-inserted programmatically, guaranteeing syntactically valid JSON output.
+Provides two strategies:
+1. **Single-shot** (default): One model.generate() call with the partial
+   JSON injected as an assistant prefix.  Fast (~1 forward pass) but the
+   model may still produce broken JSON — a repair step patches common
+   issues (trailing commas, unclosed brackets).
+2. **Per-value (jsonformer)**: The model generates only values; all
+   structural tokens are inserted programmatically.  Guarantees valid
+   JSON but requires O(fields × elements) forward passes — very slow.
 
 For instruction-tuned models, the partial JSON progress is placed as the
 *assistant prefix* (after the generation prompt token), so the model
@@ -16,13 +21,189 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Single-shot generation with assistant prefix
+# ---------------------------------------------------------------------------
+
+
+def _repair_json_array(text: str) -> str:
+    """Try to fix common JSON issues in array output from small VLMs."""
+    s = text.strip()
+    s = re.sub(r",\s*([}\]])", r"\1", s)
+    if s.startswith("[") and not s.endswith("]"):
+        last_brace = s.rfind("}")
+        if last_brace > 0:
+            s = s[: last_brace + 1] + "]"
+    return s
+
+
+def _repair_json_object(text: str) -> str:
+    """Try to fix common JSON issues in object output from small VLMs."""
+    s = text.strip()
+    s = re.sub(r",\s*([}\]])", r"\1", s)
+    opens = s.count("{") + s.count("[")
+    closes = s.count("}") + s.count("]")
+    if opens > closes:
+        arr_diff = s.count("[") - s.count("]")
+        obj_diff = s.count("{") - s.count("}")
+        s += "]" * max(arr_diff, 0) + "}" * max(obj_diff, 0)
+    return s
+
+
+def generate_json_single_shot(
+    model,
+    processor,
+    json_schema: dict[str, Any],
+    prompt: str,
+    image,
+    *,
+    max_new_tokens: int = 4096,
+    root_type: str = "array",
+) -> Any:
+    """Generate JSON in one model.generate() call with assistant prefix.
+
+    The task description and schema go in the user message.  The opening
+    bracket (``[`` for arrays, ``{`` for objects) is placed as the
+    assistant prefix so the model continues the JSON directly, avoiding
+    markdown code fences.
+
+    Returns the parsed Python object (list or dict), or an empty
+    list/dict on failure.
+    """
+    import torch
+
+    user_text = (
+        f"{prompt}\n"
+        f"Output JSON matching this schema:\n{json.dumps(json_schema)}\n"
+        f"Output ONLY the JSON, no explanations."
+    )
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": user_text},
+            ],
+        }
+    ]
+
+    text_input = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+
+    # Inject assistant prefix — the opening bracket
+    prefix = "[" if root_type == "array" else "{"
+    text_input += prefix
+
+    inputs = processor(
+        text=[text_input],
+        images=[image],
+        padding=True,
+        return_tensors="pt",
+    )
+    inputs = inputs.to(model.device)
+
+    with torch.no_grad():
+        generated_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=processor.tokenizer.eos_token_id,
+        )
+
+    input_len = inputs["input_ids"].shape[1]
+    new_tokens = generated_ids[0, input_len:]
+
+    # Strip thinking tokens if present
+    from ._model_registry import extract_after_think_token
+
+    new_tokens = extract_after_think_token(new_tokens.unsqueeze(0)).squeeze(0)
+
+    raw_text = processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
+    # Prepend the prefix we injected
+    full_text = prefix + raw_text.strip()
+
+    _log.debug("Single-shot raw output: %s", full_text[:500])
+
+    # --- Parse with repair fallback ---
+    if root_type == "array":
+        return _parse_array(full_text)
+    else:
+        return _parse_object(full_text)
+
+
+def _parse_array(text: str) -> list:
+    """Parse a JSON array with repair fallback."""
+    json_match = re.search(r"\[[\s\S]*\]", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            repaired = _repair_json_array(json_match.group())
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError:
+                pass
+
+    # Try to close a partial array
+    partial = re.search(r"\[[\s\S]*", text)
+    if partial:
+        repaired = _repair_json_array(partial.group())
+        try:
+            result = json.loads(repaired)
+            _log.info("Array JSON repaired (%d elements)", len(result))
+            return result
+        except json.JSONDecodeError as e:
+            _log.warning("Failed to parse array JSON: %s\nRaw: %s", e, text[:300])
+
+    return []
+
+
+def _parse_object(text: str) -> dict:
+    """Parse a JSON object with repair fallback."""
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            repaired = _repair_json_object(json_match.group())
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError:
+                pass
+
+    partial = re.search(r"\{[\s\S]*", text)
+    if partial:
+        repaired = _repair_json_object(partial.group())
+        try:
+            result = json.loads(repaired)
+            _log.info("Object JSON repaired (%d keys)", len(result))
+            return result
+        except json.JSONDecodeError as e:
+            _log.warning("Failed to parse object JSON: %s\nRaw: %s", e, text[:300])
+
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Per-value jsonformer (slow but guaranteed-valid fallback)
+# ---------------------------------------------------------------------------
+
+
 class VLMJsonformer:
-    """Constrained JSON generator for vision-language models."""
+    """Constrained JSON generator for vision-language models.
+
+    Each value (string, number, boolean) is generated by a separate
+    model call.  Structural tokens are inserted programmatically.
+    This guarantees syntactically valid JSON but is very slow.
+    """
 
     GENERATION_MARKER = "|GENERATION|"
 
@@ -110,7 +291,6 @@ class VLMJsonformer:
         text = self.processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
         text = text.strip().rstrip(".,}")
 
-        # Extract first valid number
         num_str = ""
         for ch in text:
             if ch.isdigit() or ch == "." or (ch == "-" and not num_str):
@@ -142,7 +322,6 @@ class VLMJsonformer:
         if isinstance(true_id, int) and isinstance(false_id, int):
             return bool(logits[true_id] > logits[false_id])
 
-        # Fallback: generate a token and check
         with torch.no_grad():
             response = self.model.generate(
                 **inputs, max_new_tokens=3, do_sample=False,
@@ -173,7 +352,6 @@ class VLMJsonformer:
         new_tokens = response[0, input_len:]
         text = self.processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-        # Take text up to the closing quote
         if '"' in text:
             text = text.split('"')[0]
         return text.strip()
@@ -263,9 +441,8 @@ class VLMJsonformer:
             element = self.generate_value(item_schema, arr)
             arr[-1] = element
 
-            # Check if array should continue
             if i == 0:
-                continue  # Force at least one element
+                continue
             arr.append(self.GENERATION_MARKER)
             should_continue = self._should_continue_array(self._root_value)
             arr.pop()

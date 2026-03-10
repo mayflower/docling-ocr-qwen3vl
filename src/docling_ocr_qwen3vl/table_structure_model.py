@@ -21,7 +21,7 @@ except ImportError:
     )
 
 from ._model_registry import get_model, maybe_empty_cache
-from ._vlm_jsonformer import VLMJsonformer
+from ._vlm_jsonformer import generate_json_single_shot
 from .options import Qwen3VlTableStructureOptions
 from .prompts import TABLE_JSONFORMER_PROMPT
 
@@ -135,28 +135,25 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
         table_bbox: BoundingBox,
         page: Page,
     ) -> Table | None:
-        """Extract table structure from an image using constrained JSON generation."""
+        """Extract table structure from an image using assistant-prefix generation."""
         assert self._shared is not None
         model = self._shared.model
         processor = self._shared.processor
 
         image_rgb = table_image.convert("RGB")
 
-        jsonformer = VLMJsonformer(
+        data = generate_json_single_shot(
             model=model,
             processor=processor,
             json_schema=TABLE_SCHEMA,
             prompt=TABLE_JSONFORMER_PROMPT,
             image=image_rgb,
-            max_array_length=50,
-            max_number_tokens=4,
-            max_string_token_length=50,
+            max_new_tokens=self.options.max_new_tokens,
+            root_type="object",
         )
-
-        data = jsonformer()
         maybe_empty_cache()
 
-        _log.debug("Table jsonformer output: %s", json.dumps(data)[:500])
+        _log.debug("Table output: %s", json.dumps(data)[:500])
 
         if not data:
             return None

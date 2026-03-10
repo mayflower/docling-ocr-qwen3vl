@@ -19,7 +19,7 @@ except ImportError:
     from docling.datamodel.pipeline_options import LayoutOptions as BaseLayoutOptions
 
 from ._model_registry import get_model, maybe_empty_cache
-from ._vlm_jsonformer import VLMJsonformer
+from ._vlm_jsonformer import generate_json_single_shot
 from .options import Qwen3VlLayoutOptions
 from .prompts import LAYOUT_JSONFORMER_PROMPT
 
@@ -118,30 +118,28 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
         return predictions
 
     def _analyze_layout(self, page_image, page: Page) -> list[Cluster]:
-        """Analyze page layout using Qwen3-VL with constrained JSON generation."""
+        """Analyze page layout using Qwen3-VL with assistant-prefix generation."""
         assert self._shared is not None
         model = self._shared.model
         processor = self._shared.processor
 
         image_rgb = page_image.convert("RGB")
 
-        jsonformer = VLMJsonformer(
+        elements = generate_json_single_shot(
             model=model,
             processor=processor,
             json_schema=LAYOUT_SCHEMA,
             prompt=LAYOUT_JSONFORMER_PROMPT,
             image=image_rgb,
-            max_array_length=30,
-            max_number_tokens=4,
-            max_string_token_length=10,
+            max_new_tokens=self.options.max_new_tokens,
+            root_type="array",
         )
-
-        elements = jsonformer()
         maybe_empty_cache()
 
         _log.debug(
-            "Layout jsonformer output (page %s): %s",
+            "Layout output (page %s, %d elements): %s",
             page.page_no,
+            len(elements),
             json.dumps(elements)[:500],
         )
 
