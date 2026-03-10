@@ -21,26 +21,10 @@ except ImportError:
 from ._model_registry import get_model, maybe_empty_cache
 from ._vlm_jsonformer import generate_json_single_shot
 from .options import Qwen3VlLayoutOptions
-from .prompts import LAYOUT_JSONFORMER_PROMPT
+from .prompts import LAYOUT_ANALYSIS_PROMPT
 
 
 _log = logging.getLogger(__name__)
-
-
-# JSON schema for constrained layout generation
-LAYOUT_SCHEMA: dict = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "label": {"type": "string"},
-            "x1": {"type": "number"},
-            "y1": {"type": "number"},
-            "x2": {"type": "number"},
-            "y2": {"type": "number"},
-        },
-    },
-}
 
 
 # Map from prompt labels to DocItemLabel
@@ -128,8 +112,7 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
         elements = generate_json_single_shot(
             model=model,
             processor=processor,
-            json_schema=LAYOUT_SCHEMA,
-            prompt=LAYOUT_JSONFORMER_PROMPT,
+            prompt=LAYOUT_ANALYSIS_PROMPT,
             image=image_rgb,
             max_new_tokens=self.options.max_new_tokens,
             root_type="array",

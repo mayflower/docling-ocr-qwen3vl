@@ -59,7 +59,6 @@ def _repair_json_object(text: str) -> str:
 def generate_json_single_shot(
     model,
     processor,
-    json_schema: dict[str, Any],
     prompt: str,
     image,
     *,
@@ -68,21 +67,17 @@ def generate_json_single_shot(
 ) -> Any:
     """Generate JSON in one model.generate() call with assistant prefix.
 
-    The task description and schema go in the user message.  The opening
-    bracket (``[`` for arrays, ``{`` for objects) is placed as the
-    assistant prefix so the model continues the JSON directly, avoiding
-    markdown code fences.
+    The prompt should contain the full task description, format spec,
+    and examples.  The opening bracket (``[`` for arrays, ``{`` for
+    objects) is placed as the assistant prefix so the model continues
+    the JSON directly, avoiding markdown code fences.
 
     Returns the parsed Python object (list or dict), or an empty
     list/dict on failure.
     """
     import torch
 
-    user_text = (
-        f"{prompt}\n"
-        f"Output JSON matching this schema:\n{json.dumps(json_schema)}\n"
-        f"Output ONLY the JSON, no explanations."
-    )
+    user_text = prompt
 
     messages = [
         {

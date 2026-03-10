@@ -23,38 +23,10 @@ except ImportError:
 from ._model_registry import get_model, maybe_empty_cache
 from ._vlm_jsonformer import generate_json_single_shot
 from .options import Qwen3VlTableStructureOptions
-from .prompts import TABLE_JSONFORMER_PROMPT
+from .prompts import TABLE_STRUCTURE_PROMPT
 
 
 _log = logging.getLogger(__name__)
-
-
-# JSON schema for constrained table structure generation
-TABLE_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "rows": {"type": "number"},
-        "cols": {"type": "number"},
-        "cells": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "row": {"type": "number"},
-                    "col": {"type": "number"},
-                    "text": {"type": "string"},
-                    "rs": {"type": "number"},
-                    "cs": {"type": "number"},
-                    "hdr": {"type": "boolean"},
-                    "x1": {"type": "number"},
-                    "y1": {"type": "number"},
-                    "x2": {"type": "number"},
-                    "y2": {"type": "number"},
-                },
-            },
-        },
-    },
-}
 
 
 class Qwen3VlTableStructureModel(BaseTableStructureModel):
@@ -145,8 +117,7 @@ class Qwen3VlTableStructureModel(BaseTableStructureModel):
         data = generate_json_single_shot(
             model=model,
             processor=processor,
-            json_schema=TABLE_SCHEMA,
-            prompt=TABLE_JSONFORMER_PROMPT,
+            prompt=TABLE_STRUCTURE_PROMPT,
             image=image_rgb,
             max_new_tokens=self.options.max_new_tokens,
             root_type="object",
