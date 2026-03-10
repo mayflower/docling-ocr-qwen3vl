@@ -89,7 +89,7 @@ class Qwen3VlOcrOptions(OcrOptions):
         description="Hugging Face repository identifier for the Qwen3-VL model.",
     )
     prompt_mode: Qwen3VlPromptMode = Field(
-        default=Qwen3VlPromptMode.OCR,
+        default=Qwen3VlPromptMode.QWENVL_HTML,
         description="Prompt template selection that controls output format.",
     )
     prompt_overrides: dict[str, str] = Field(
