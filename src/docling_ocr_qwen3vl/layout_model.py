@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+import warnings
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
+import numpy as np
 from docling.datamodel.accelerator_options import AcceleratorOptions
 from docling.datamodel.base_models import BoundingBox, Cluster, LayoutPrediction, Page
 from docling.datamodel.document import ConversionResult
 from docling.models.base_layout_model import BaseLayoutModel
+from docling.utils.layout_postprocessor import LayoutPostprocessor
 from docling_core.types.doc import DocItemLabel
 
 try:
@@ -81,6 +84,55 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
     @classmethod
     def get_options_type(cls) -> type[BaseLayoutOptions]:
         return Qwen3VlLayoutOptions
+
+    def __call__(
+        self,
+        conv_res: ConversionResult,
+        page_batch: Iterable[Page],
+    ) -> Iterable[Page]:
+        """Override BaseLayoutModel.__call__ to apply LayoutPostprocessor.
+
+        BaseLayoutModel only stores raw cluster predictions.  The default
+        docling LayoutModel additionally runs LayoutPostprocessor which
+        assigns OCR cells to clusters and creates orphan clusters for
+        unmatched cells.  Without this step the page assembly produces
+        empty text because cluster.cells is always [].
+        """
+        pages = list(page_batch)
+        predictions = self.predict_layout(conv_res, pages)
+
+        for page, prediction in zip(pages, predictions):
+            processed_clusters, _processed_cells = LayoutPostprocessor(
+                page, prediction.clusters, self.options
+            ).postprocess()
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    "Mean of empty slice|invalid value encountered in scalar divide",
+                    RuntimeWarning,
+                    "numpy",
+                )
+
+                conv_res.confidence.pages[page.page_no].layout_score = float(
+                    np.mean([c.confidence for c in processed_clusters])
+                )
+
+                conv_res.confidence.pages[page.page_no].ocr_score = float(
+                    np.mean(
+                        [c.confidence for c in _processed_cells if c.from_ocr]
+                    )
+                )
+
+            page.predictions.layout = LayoutPrediction(clusters=processed_clusters)
+            _log.debug(
+                "Post-processed layout page %s: %d clusters, %d total cells",
+                page.page_no,
+                len(processed_clusters),
+                sum(len(c.cells) for c in processed_clusters),
+            )
+
+            yield page
 
     def predict_layout(
         self,
