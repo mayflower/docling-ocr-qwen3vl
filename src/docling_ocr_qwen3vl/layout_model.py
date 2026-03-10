@@ -150,6 +150,13 @@ class Qwen3VlLayoutModel(BaseLayoutModel):
                 x2 = elem.get("x2", 1000)
                 y2 = elem.get("y2", 1000)
 
+            # Validate and fix coordinates
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            if x1 == x2 or y1 == y2:
+                _log.debug("Skipping zero-area element: %s", elem)
+                continue
+
             # Convert bbox from 0-1000 scale to page coordinates
             if page.size:
                 bbox = BoundingBox(

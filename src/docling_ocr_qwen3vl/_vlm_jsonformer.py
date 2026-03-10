@@ -32,9 +32,16 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _fix_corrupted_keys(text: str) -> str:
+    """Fix corrupted JSON keys like "y1:890 → "y1":890."""
+    # Pattern: "key_name:value" where the closing quote is missing before colon
+    return re.sub(r'"(\w+):(\d)', r'"\1":\2', text)
+
+
 def _repair_json_array(text: str) -> str:
     """Try to fix common JSON issues in array output from small VLMs."""
     s = text.strip()
+    s = _fix_corrupted_keys(s)
     s = re.sub(r",\s*([}\]])", r"\1", s)
     if s.startswith("[") and not s.endswith("]"):
         last_brace = s.rfind("}")
@@ -43,9 +50,27 @@ def _repair_json_array(text: str) -> str:
     return s
 
 
+def _extract_valid_elements(text: str) -> list:
+    """Extract individually valid JSON objects from a corrupted array.
+
+    When the overall array JSON is broken, try to salvage valid objects
+    by splitting on ``},{`` boundaries and parsing each one.
+    """
+    objects = re.findall(r"\{[^{}]*\}", text)
+    results = []
+    for obj_str in objects:
+        fixed = _fix_corrupted_keys(obj_str)
+        try:
+            results.append(json.loads(fixed))
+        except json.JSONDecodeError:
+            continue
+    return results
+
+
 def _repair_json_object(text: str) -> str:
     """Try to fix common JSON issues in object output from small VLMs."""
     s = text.strip()
+    s = _fix_corrupted_keys(s)
     s = re.sub(r",\s*([}\]])", r"\1", s)
     opens = s.count("{") + s.count("[")
     closes = s.count("}") + s.count("]")
@@ -110,6 +135,7 @@ def generate_json_single_shot(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
+            repetition_penalty=1.3,
             pad_token_id=processor.tokenizer.eos_token_id,
         )
 
@@ -155,15 +181,25 @@ def _parse_array(text: str) -> list:
             result = json.loads(repaired)
             _log.info("Array JSON repaired (%d elements)", len(result))
             return result
-        except json.JSONDecodeError as e:
-            _log.warning("Failed to parse array JSON: %s\nRaw: %s", e, text[:300])
+        except json.JSONDecodeError:
+            pass
 
+    # Last resort: extract individual valid objects from corrupted text
+    salvaged = _extract_valid_elements(text)
+    if salvaged:
+        _log.info("Salvaged %d elements from corrupted array JSON", len(salvaged))
+        return salvaged
+
+    _log.warning("Failed to parse array JSON.\nRaw: %s", text[:300])
     return []
 
 
 def _parse_object(text: str) -> dict:
     """Parse a JSON object with repair fallback."""
-    json_match = re.search(r"\{[\s\S]*\}", text)
+    # Apply key repair upfront
+    fixed = _fix_corrupted_keys(text)
+
+    json_match = re.search(r"\{[\s\S]*\}", fixed)
     if json_match:
         try:
             return json.loads(json_match.group())
@@ -174,7 +210,7 @@ def _parse_object(text: str) -> dict:
             except json.JSONDecodeError:
                 pass
 
-    partial = re.search(r"\{[\s\S]*", text)
+    partial = re.search(r"\{[\s\S]*", fixed)
     if partial:
         repaired = _repair_json_object(partial.group())
         try:

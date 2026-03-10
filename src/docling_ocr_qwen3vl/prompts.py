@@ -72,14 +72,18 @@ Output ONLY the JSON object."""
 # nested-array formatting errors from small VLMs.
 LAYOUT_ANALYSIS_PROMPT = """Detect every document element in this page image.
 
-Return a JSON array. Each element has these fields:
+Return a JSON array. Each element:
 {"label":"<type>","x1":<int>,"y1":<int>,"x2":<int>,"y2":<int>}
 
-Coordinates are integers 0-1000 (top-left origin).
+Rules:
+- Coordinates are integers 0-1000 (top-left origin)
+- x1 < x2, y1 < y2 (y1 is top edge, y2 is bottom edge)
+- Use the correct label for each element
+
 Types: title, section_header, text, list_item, table, picture, caption, footnote, page_header, page_footer, formula, code
 
-Example:
-[{"label":"title","x1":50,"y1":20,"x2":950,"y2":80},{"label":"text","x1":50,"y1":100,"x2":950,"y2":400}]
+Example for a page with a header, title, paragraph, and table:
+[{"label":"page_header","x1":50,"y1":10,"x2":950,"y2":40},{"label":"title","x1":100,"y1":50,"x2":800,"y2":100},{"label":"text","x1":50,"y1":120,"x2":950,"y2":450},{"label":"table","x1":50,"y1":470,"x2":950,"y2":750}]
 
 Output ONLY the JSON array."""
 
