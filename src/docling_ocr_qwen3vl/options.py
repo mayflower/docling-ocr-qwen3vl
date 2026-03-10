@@ -277,7 +277,7 @@ class Qwen3VlTableStructureOptions(BaseTableStructureOptions):
         description="Torch dtype passed to the model initialization.",
     )
     max_new_tokens: int = Field(
-        default=4096,
+        default=2048,
         description="Maximum tokens generated during inference.",
         ge=1,
     )
@@ -339,7 +339,7 @@ class Qwen3VlLayoutOptions(BaseLayoutOptions):
         description="Torch dtype passed to the model initialization.",
     )
     max_new_tokens: int = Field(
-        default=4096,
+        default=1024,
         description="Maximum tokens generated during inference.",
         ge=1,
     )
