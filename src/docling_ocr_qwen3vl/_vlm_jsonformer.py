@@ -6,6 +6,10 @@ Qwen3-VL and similar VLMs that require image inputs alongside text prompts.
 The key idea: the model only generates *values* (strings, numbers, booleans).
 All structural tokens (braces, brackets, colons, commas, key names) are
 inserted programmatically, guaranteeing syntactically valid JSON output.
+
+For instruction-tuned models, the partial JSON progress is placed as the
+*assistant prefix* (after the generation prompt token), so the model
+continues the JSON rather than starting a new response.
 """
 
 from __future__ import annotations
@@ -44,19 +48,19 @@ class VLMJsonformer:
         self.max_number_tokens = max_number_tokens
         self.max_string_token_length = max_string_token_length
 
-        # Cache processed image inputs (pixel_values, image_grid_thw)
-        self._cached_image_inputs: dict | None = None
-
-    def _prepare_inputs(self, text_prompt: str) -> dict:
-        """Prepare model inputs from text + cached image."""
-        import torch
+    def _prepare_inputs(self, assistant_prefix: str = "") -> dict:
+        """Prepare model inputs with task in user msg, partial JSON as assistant prefix."""
+        user_text = (
+            f"{self.prompt}\n"
+            f"Output JSON matching this schema:\n{json.dumps(self.json_schema)}"
+        )
 
         messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "image", "image": self.image},
-                    {"type": "text", "text": text_prompt},
+                    {"type": "text", "text": user_text},
                 ],
             }
         ]
@@ -64,6 +68,9 @@ class VLMJsonformer:
         text_input = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
+
+        # Append partial JSON as the start of the assistant response
+        text_input += assistant_prefix
 
         inputs = self.processor(
             text=[text_input],
@@ -73,26 +80,22 @@ class VLMJsonformer:
         )
         return inputs.to(self.model.device)
 
-    def _get_prompt(self, value: dict | list) -> str:
-        """Build the full prompt including schema and generation progress."""
+    def _get_progress(self, value: dict | list) -> str:
+        """Build the assistant prefix from generation progress so far."""
         progress = json.dumps(value)
         marker_idx = progress.find(f'"{self.GENERATION_MARKER}"')
         if marker_idx == -1:
             marker_idx = progress.find(f"{self.GENERATION_MARKER}")
         if marker_idx != -1:
             progress = progress[:marker_idx]
-        return (
-            f"{self.prompt}\n"
-            f"Output JSON matching this schema:\n{json.dumps(self.json_schema)}\n"
-            f"Result: {progress}"
-        )
+        return progress
 
     def generate_number(self, value: dict | list) -> float:
         """Let the model generate a number value."""
         import torch
 
-        prompt = self._get_prompt(value)
-        inputs = self._prepare_inputs(prompt)
+        prefix = self._get_progress(value)
+        inputs = self._prepare_inputs(prefix)
 
         with torch.no_grad():
             response = self.model.generate(
@@ -125,8 +128,8 @@ class VLMJsonformer:
         """Let the model decide true/false."""
         import torch
 
-        prompt = self._get_prompt(value)
-        inputs = self._prepare_inputs(prompt)
+        prefix = self._get_progress(value)
+        inputs = self._prepare_inputs(prefix)
 
         with torch.no_grad():
             output = self.model.forward(**inputs)
@@ -155,8 +158,8 @@ class VLMJsonformer:
         """Let the model generate a string value."""
         import torch
 
-        prompt = self._get_prompt(value) + '"'
-        inputs = self._prepare_inputs(prompt)
+        prefix = self._get_progress(value) + '"'
+        inputs = self._prepare_inputs(prefix)
 
         with torch.no_grad():
             response = self.model.generate(
@@ -179,8 +182,8 @@ class VLMJsonformer:
         """Ask model if array should continue (comma) or end (bracket)."""
         import torch
 
-        prompt = self._get_prompt(value)
-        inputs = self._prepare_inputs(prompt)
+        prefix = self._get_progress(value)
+        inputs = self._prepare_inputs(prefix)
 
         with torch.no_grad():
             output = self.model.forward(**inputs)
