@@ -6,6 +6,10 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from ._version import __version__
+from . import presets as _presets  # registers Qwen3-VL stage presets on import
+
+del _presets
+
 from .options import (
     Qwen3VlCodeFormulaOptions,
     Qwen3VlLayoutOptions,
