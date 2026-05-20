@@ -1,67 +1,75 @@
-# Picture description comparison: Qwen3-VL vs SmolVLM
+# Picture description comparison: Qwen3-VL vs SmolVLM vs Granite Vision
 
-Apples-to-apples benchmark of the two picture-description options available
-in the mayflower docling-serve image. Both runs use the same OCR
-(`qwen3vl_ocr`), the same default `docling-layout-heron` + `docling_tableformer`
-for layout and tables, and the same input document. Only the picture
-description engine is swapped.
+Benchmark of the three picture-description engines available in the mayflower
+docling-serve image, run against the same input document.
 
 ## Setup
 
-- **Server**: local docling-serve dev, mayflower fork, with
+- **Server**: local docling-serve dev, mayflower fork, with the
   `picture_description_custom_config={"kind":"qwen3vl"}` bridge installed
   (mayflower/docling-jobkit's kind escape hatch).
 - **Hardware**: NVIDIA GeForce RTX 3080 Ti Laptop, 16 GB VRAM.
 - **Input**: 10-page bilingual (German + English) Mayflower Security
   Whitepaper PDF, multi-column layout, mixed photos / logos / icons.
-- **Pipeline configuration**, identical across both runs:
-  - `ocr_engine: "qwen3vl_ocr"` (Qwen3-VL, unsloth bnb-4bit)
-  - default `docling-layout-heron` for layout
-  - default `docling_tableformer` for tables
-  - `do_picture_description: true`
-- **Variable**: picture description engine
-  - Run A: `picture_description_custom_config: {"kind": "qwen3vl"}` —
-    factory-dispatched into the plugin's `Qwen3VlPictureDescriptionModel`,
-    which reuses the shared Qwen3-VL singleton already serving OCR.
-  - Run B: `picture_description_preset: "smolvlm"` — docling's upstream
-    `PictureDescriptionVlmEngineModel` with SmolVLM-256M-Instruct loaded as
-    a separate model in VRAM.
-- **PDF**: 10 pages, 28 image regions detected, of which 2 cleared the
-  default `picture_area_threshold: 0.05` and got captioned.
+- **Picture area threshold**: default `0.05`, so only photo-like regions get
+  captioned. Both photos in the document cleared the threshold; logos and
+  small icons did not.
 
-Raw artifacts:
-- `scripts/test_output_hybrid_pic.json` — Run A (qwen3vl)
-- `scripts/test_output_hybrid_smolvlm.json` — Run B (smolvlm)
+Raw artifacts (in `scripts/`):
+- `test_output_hybrid_pic.json` — Qwen3-VL pic desc
+- `test_output_hybrid_smolvlm.json` — SmolVLM pic desc
+- `test_output_hybrid_granite.json` — Granite Vision pic desc
+
+## VRAM situation
+
+This benchmark exists because the docling picture-description architecture
+(new `PictureDescriptionVlmEngineModel` + `TransformersVlmEngine`) loads its
+model independently of the OCR stage. Picking a non-Qwen picture description
+engine means **two VLMs in VRAM at once** — the OCR model and the picture
+description model — for the entire conversion. This matters on a 16 GB GPU:
+
+| Picture description model | + Qwen3-VL OCR singleton fits? |
+|---|---|
+| Qwen3-VL (via kind dispatch) | **shared singleton — only one model in VRAM** |
+| SmolVLM-256M (~500 MB) | yes |
+| Granite Vision 3.3-2B (~5 GB bf16) | **no — OOMs at inference** |
+
+For Granite Vision, this means we couldn't run apples-to-apples against the
+other two. The Granite run uses **default OCR (RapidOCR)** instead of
+Qwen3-VL OCR, which keeps only Granite in VRAM.
 
 ## Results
 
-| Metric | Qwen3-VL pic desc (A) | SmolVLM pic desc (B) |
-|---|---|---|
-| Processing time | 321 s | 304 s |
-| Pipeline errors | 0 | 0 |
-| Pictures captioned | 2 of 28 | 2 of 28 |
-| Caption quality | Detailed, multi-sentence | Generic one-liners |
-| Output cleanliness | Clean | Broken `<end_of_utteranc` truncation |
-| Extra VRAM cost | ~0 (singleton shared with OCR) | +500 MB (separate model load) |
+| Pipeline | OCR engine | Pic desc engine | Proc time | Pic capt | Errors |
+|---|---|---|---:|---:|---:|
+| **Qwen3-VL bridge** | Qwen3-VL | Qwen3-VL (singleton) | 321 s | 2 of 28 | 0 |
+| Hybrid + SmolVLM | Qwen3-VL | SmolVLM preset | 304 s | 2 of 28 | 0 |
+| Default + Granite | RapidOCR | Granite Vision preset | 21 s | 2 of 28 | 0 |
 
-SmolVLM is 17 s (5%) faster. The win is rounding error in a 5-minute pipeline
-dominated by Qwen3-VL OCR. SmolVLM does not earn its separate model load at
-this output quality.
+The Granite row is **not** time-comparable to the other two — almost all the
+21 s saving vs Qwen3-VL OCR is the OCR engine difference, not the picture
+description engine.
 
-## Caption samples
+## Caption quality, side by side
 
-Same image, both engines. Image 1 — BITS & PRETZELS hero / case-study slide:
+Same two photo images across all three runs.
+
+### Image 1 — BITS & PRETZELS hero / case-study slide
 
 > **Qwen3-VL**
 > This is a promotional or informational graphic, likely for a corporate or
 > marketing purpose, designed to highlight a video platform called
 > "BITS & PRETZELS." The image is split into two distinct vertical sections.
 
+> **Granite Vision**
+> a screen with the words bits & pretzels on it and a crowd of people in
+> front of i *(truncated at max_new_tokens)*
+
 > **SmolVLM**
 > In this image, we can see a group of people. There is a blue
 > background.\<end\_of\_utteranc
 
-Image 2 — conference hall photo with framed video feed overlay:
+### Image 2 — conference hall photo with framed video feed overlay
 
 > **Qwen3-VL**
 > This is a promotional graphic or advertisement for digital conferencing,
@@ -69,32 +77,61 @@ Image 2 — conference hall photo with framed video feed overlay:
 > The image is split into two main visual areas: a dark, blurred background
 > on the left and a clear, framed video feed on the right.
 
-> **SmolVLM**
-> In this image we can see a group of people standing and watching something.
-> In the background there is a blur image.\<end\_of\_utteranc
+> **Granite Vision**
+> digital conference with the text digital conference on it and a large
+> screen showing a crowd of people sitting in chairs and looking at a screen.
 
-Qwen3-VL reads on-image text ("BITS & PRETZELS"), identifies purpose
-("advertisement for digital conferencing"), and describes composition
-("split into two main visual areas: a dark, blurred background on the left
-and a clear, framed video feed on the right"). SmolVLM produces generic
-"group of people" descriptions and ships broken EOS tokens that leak into
-the markdown output (the `<end_of_utterance>` marker hits the
-`max_new_tokens=200` cap mid-token).
+> **SmolVLM**
+> In this image we can see a group of people standing and watching
+> something. In the background there is a blur image.\<end\_of\_utteranc
+
+### Observations
+
+- **Qwen3-VL** reads on-image text (`BITS & PRETZELS`), names the image
+  *purpose* ("advertisement for digital conferencing"), and describes the
+  *composition* ("split into two main visual areas: a dark, blurred
+  background on the left and a clear, framed video feed on the right").
+  Multi-sentence, clean.
+- **Granite Vision** reads on-image text but in a CLIP-like format
+  ("a screen with the words X"). Single sentence, sometimes truncated at
+  the `max_new_tokens` cap, and shows verbatim repetition ("digital
+  conference … digital conference"). Better than SmolVLM, well below
+  Qwen3-VL.
+- **SmolVLM** misses every piece of on-image text, gives generic "group of
+  people / blue background" descriptions, and ships broken
+  `<end_of_utterance>` markers when its EOS token gets cut off by
+  `max_new_tokens=200`.
+
+## German text quality (separate axis)
+
+Because the Granite run forced us off Qwen3-VL OCR, its document body shows
+the usual RapidOCR weaknesses on German:
+
+- `Lösung` → `Losung`
+- `München` → `Munchen`
+- `möglich` → `moglich`
+- Word-spacing errors: `Vorraussetzungenerfillen`, `DieZugriffsschlussel`
+- Digits / letters confused: `5.000` → `5.0o0`
+
+Qwen3-VL OCR keeps all of these correct (umlauts, ß, word spacing). For
+German technical / marketing PDFs that's the difference between searchable
+content and lossy noise — independent of which picture description engine
+you choose.
 
 ## Recommendation
 
-For German technical / marketing PDFs with embedded photos that contain
-on-image text or convey context: **use Qwen3-VL via the custom_config kind
-dispatch**. Speed cost is negligible — the singleton already in memory for
-OCR is reused — and caption quality is qualitatively better in every
-dimension that matters (content, on-image text, intent, composition).
+- **For Qwen3-VL OCR (recommended for German content)**:
+  picture description should also be Qwen3-VL via the kind dispatch
+  (`picture_description_custom_config: {"kind": "qwen3vl"}`). One model in
+  VRAM, no compatibility issues, best caption quality.
+- **If you must use RapidOCR / a non-Qwen OCR**: Granite Vision is the
+  better picture description option of the two non-Qwen choices — it at
+  least reads on-image text. SmolVLM produces captions that aren't worth
+  the model load on this kind of content.
+- **SmolVLM** earns its slot only on tightly VRAM-constrained deployments
+  where caption *coverage* matters more than caption *quality*, and where
+  on-image text reading is not required.
 
-SmolVLM remains the right pick only when:
-
-- OCR is also a non-Qwen engine (so no shared singleton),
-- The deployment is VRAM-constrained below ~6 GB,
-- And caption fidelity is not a requirement.
-
-For everything else in this stack, the recommended request body in
-[`RECIPES.md`](RECIPES.md) (qwen3vl OCR + default layout/tables +
-`picture_description_custom_config: {"kind": "qwen3vl"}`) stays the default.
+The default request body in [`RECIPES.md`](RECIPES.md) (qwen3vl OCR +
+default layout/tables + `picture_description_custom_config: {"kind":
+"qwen3vl"}`) stays the default for this stack.
